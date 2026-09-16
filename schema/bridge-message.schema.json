@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-sync.local/schema/bridge-message.schema.json",
+  "title": "Video Sync bridge JSON Lines message",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "seq", "sourceTimeUs", "emittedAtUnixMs", "source", "type", "payload"],
+  "properties": {
+    "v": { "const": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "sourceTimeUs": { "type": "integer", "minimum": 0 },
+    "emittedAtUnixMs": { "type": "integer", "minimum": 0 },
+    "source": { "enum": ["bridge", "ableton-link", "midi", "controller-midi", "rekordbox-midi"] },
+    "type": {
+      "enum": [
+        "bridge.ready",
+        "bridge.self-test",
+        "bridge.stopped",
+        "link.clock",
+        "midi.ports",
+        "midi.raw",
+        "controller.control",
+        "rekordbox.control"
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "link.clock" } }, "required": ["type"] },
+      "then": { "properties": { "source": { "const": "ableton-link" }, "payload": { "$ref": "#/$defs/linkClock" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "midi.raw" } }, "required": ["type"] },
+      "then": { "properties": { "source": { "enum": ["controller-midi", "rekordbox-midi"] }, "payload": { "$ref": "#/$defs/midiRaw" } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["controller.control", "rekordbox.control"] } }, "required": ["type"] },
+      "then": { "properties": { "source": { "enum": ["controller-midi", "rekordbox-midi"] }, "payload": { "$ref": "#/$defs/controllerControl" } } }
+    }
+  ],
+  "$defs": {
+    "linkClock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tempo", "beat", "phase", "quantum", "playing", "peers"],
+      "properties": {
+        "tempo": { "type": "number", "exclusiveMinimum": 0 },
+        "beat": { "type": "number" },
+        "phase": { "type": "number" },
+        "quantum": { "type": "number", "exclusiveMinimum": 0 },
+        "playing": { "type": "boolean" },
+        "peers": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "midiRaw": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deltaSeconds", "kind", "status", "channel", "data1", "value", "bytes"],
+      "properties": {
+        "deltaSeconds": { "type": "number", "minimum": 0 },
+        "kind": { "enum": ["empty", "note-off", "note-on", "control-change", "program-change", "pitch-bend", "system-or-other"] },
+        "status": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "channel": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "data1": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "value": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "bytes": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 0, "maximum": 255 } }
+      }
+    },
+    "controllerControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "deck", "value", "rawValue", "resolutionBits", "active"],
+      "properties": {
+        "event": { "type": "string", "minLength": 1 },
+        "deck": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "value": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rawValue": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "resolutionBits": { "enum": [7, 14] },
+        "active": { "type": "boolean" }
+      }
+    }
+  }
+}

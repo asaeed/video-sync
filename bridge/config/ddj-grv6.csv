@@ -1,0 +1,53 @@
+# event,status,data1,deck,value_mode
+# AlphaTheta DDJ-GRV6 MIDI Message List E1 (2024).
+# Button rows emit press and release; consumers act on active=true.
+deck.play,0x90,0x0B,1,button
+deck.play,0x91,0x0B,2,button
+# Browse-section LOAD 1/2 buttons are global MIDI channel 7 notes 70/71.
+deck.load,0x96,0x46,1,button
+deck.load,0x96,0x47,2,button
+hotcue.a,0x97,0x00,1,button
+hotcue.b,0x97,0x01,1,button
+hotcue.c,0x97,0x02,1,button
+hotcue.d,0x97,0x03,1,button
+hotcue.e,0x97,0x04,1,button
+hotcue.f,0x97,0x05,1,button
+hotcue.g,0x97,0x06,1,button
+hotcue.h,0x97,0x07,1,button
+hotcue.a,0x99,0x00,2,button
+hotcue.b,0x99,0x01,2,button
+hotcue.c,0x99,0x02,2,button
+hotcue.d,0x99,0x03,2,button
+hotcue.e,0x99,0x04,2,button
+hotcue.f,0x99,0x05,2,button
+hotcue.g,0x99,0x06,2,button
+hotcue.h,0x99,0x07,2,button
+mixer.crossfader,0xB6,0x1F,0,cc14
+deck.level,0xB0,0x13,1,cc14
+deck.level,0xB1,0x13,2,cc14
+# Beat FX section. Effect and target selectors are absolute; ON/OFF and beat
+# arrows are press edges. LEVEL/DEPTH is a 14-bit global control.
+beatfx.target.deck1,0x94,0x10,0,button
+beatfx.target.deck2,0x94,0x11,0,button
+beatfx.target.deck3,0x94,0x12,0,button
+beatfx.target.deck4,0x94,0x13,0,button
+beatfx.target.master,0x94,0x14,0,button
+beatfx.target.sampler,0x94,0x16,0,button
+beatfx.select.delay,0x94,0x20,0,button
+beatfx.select.echo,0x94,0x21,0,button
+beatfx.select.low-cut-echo,0x94,0x22,0,button
+beatfx.select.spiral,0x94,0x23,0,button
+beatfx.select.helix,0x94,0x24,0,button
+beatfx.select.reverb,0x94,0x25,0,button
+beatfx.select.flanger,0x94,0x26,0,button
+beatfx.select.phaser,0x94,0x27,0,button
+beatfx.select.filter,0x94,0x28,0,button
+beatfx.select.trans,0x94,0x29,0,button
+beatfx.select.pitch,0x94,0x2A,0,button
+beatfx.select.roll,0x94,0x2B,0,button
+beatfx.select.mobius-saw,0x94,0x2C,0,button
+beatfx.select.mobius-tri,0x94,0x2D,0,button
+beatfx.toggle,0x94,0x47,0,button
+beatfx.beat-down,0x94,0x4A,0,button
+beatfx.beat-up,0x94,0x4B,0,button
+beatfx.depth,0xB4,0x02,0,cc14

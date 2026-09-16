@@ -1,0 +1,872 @@
+{
+  "$schema": "../../schema/scene.schema.json",
+  "schemaVersion": 4,
+  "id": "spirited-away",
+  "name": "Spirited Away",
+  "clips": [
+    {
+      "id": "clip-1",
+      "label": "Train on water",
+      "file": "../../assets/scenes/spirited-away/clip-1.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 0
+    },
+    {
+      "id": "clip-2",
+      "label": "Bathhouse glow",
+      "file": "../../assets/scenes/spirited-away/clip-2.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 0.5
+    },
+    {
+      "id": "clip-3",
+      "label": "Spirit procession",
+      "file": "../../assets/scenes/spirited-away/clip-3.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 1
+    },
+    {
+      "id": "clip-4",
+      "label": "Paper birds",
+      "file": "../../assets/scenes/spirited-away/clip-4.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 1.5
+    },
+    {
+      "id": "clip-5",
+      "label": "Dragon flight",
+      "file": "../../assets/scenes/spirited-away/clip-5.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 0
+    },
+    {
+      "id": "clip-6",
+      "label": "Food transformation",
+      "file": "../../assets/scenes/spirited-away/clip-6.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 0.5
+    },
+    {
+      "id": "clip-7",
+      "label": "Boiler room",
+      "file": "../../assets/scenes/spirited-away/clip-7.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 1
+    },
+    {
+      "id": "clip-8",
+      "label": "Tunnel return",
+      "file": "../../assets/scenes/spirited-away/clip-8.mp4",
+      "durationSeconds": 8,
+      "startSeconds": 1.5
+    }
+  ],
+  "visualLoops": [
+    {
+      "id": "song-default",
+      "name": "Default · Clip 1",
+      "length": {
+        "bars": 1
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "song-default-clip-1",
+          "at": {
+            "bars": 0
+          },
+          "duration": {
+            "bars": 1
+          },
+          "clipId": "clip-1",
+          "source": {
+            "startSeconds": 0,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-a-loop",
+      "name": "Cue A · Flash",
+      "length": {
+        "bars": 2
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-a-loop-base",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 8
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-1",
+          "at": {
+            "beats": 0.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-2",
+          "at": {
+            "beats": 1.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-3",
+          "at": {
+            "beats": 2.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-4",
+          "at": {
+            "beats": 3.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-5",
+          "at": {
+            "beats": 4.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-6",
+          "at": {
+            "beats": 5.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-7",
+          "at": {
+            "beats": 6.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-a-loop-flash-8",
+          "at": {
+            "beats": 7.5
+          },
+          "duration": {
+            "beats": 0.25
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-b-loop",
+      "name": "Cue B · Call/response",
+      "length": {
+        "bars": 3
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-b-loop-a",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 11
+          },
+          "clipId": "clip-8",
+          "source": {
+            "startSeconds": 1.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-b-loop-b",
+          "at": {
+            "beats": 11
+          },
+          "duration": {
+            "beats": 1
+          },
+          "clipId": "clip-2",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-c-loop",
+      "name": "Cue C · Crossfade",
+      "length": {
+        "bars": 4
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-c-loop-a",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 16
+          },
+          "clipId": "clip-3",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "plus-lighter",
+            "fit": "cover",
+            "filters": [],
+            "opacityEnvelope": {
+              "from": 1,
+              "to": 0,
+              "curve": "linear"
+            },
+            "motion": {
+              "type": "ken-burns",
+              "focusSource": "clip-subject",
+              "progress": "loop",
+              "easing": "ease-in-out",
+              "start": {
+                "scale": 1,
+                "focus": {
+                  "x": 0.5,
+                  "y": 0.5
+                }
+              },
+              "end": {
+                "scale": 1.124,
+                "focus": {
+                  "x": 0.5,
+                  "y": 0.44
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "cue-c-loop-b",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 16
+          },
+          "clipId": "clip-4",
+          "source": {
+            "startSeconds": 1.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 1,
+            "opacity": 1,
+            "blendMode": "plus-lighter",
+            "fit": "cover",
+            "filters": [],
+            "opacityEnvelope": {
+              "from": 0,
+              "to": 1,
+              "curve": "linear"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-d-loop",
+      "name": "Cue D · Sequence",
+      "length": {
+        "bars": 1
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-d-loop-a",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 2
+          },
+          "clipId": "clip-5",
+          "source": {
+            "startSeconds": 0,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-d-loop-b",
+          "at": {
+            "beats": 2
+          },
+          "duration": {
+            "beats": 2
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-e-loop",
+      "name": "Cue E · Alternate",
+      "length": {
+        "bars": 2
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-e-loop-a-1",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 4
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-e-loop-b-2",
+          "at": {
+            "beats": 4
+          },
+          "duration": {
+            "beats": 4
+          },
+          "clipId": "clip-8",
+          "source": {
+            "startSeconds": 1.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-f-loop",
+      "name": "Cue F · Flash",
+      "length": {
+        "bars": 4
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-f-loop-base",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 16
+          },
+          "clipId": "clip-2",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": [],
+            "motion": {
+              "type": "ken-burns",
+              "focusSource": "clip-subject",
+              "progress": "loop",
+              "easing": "ease-in-out",
+              "start": {
+                "scale": 1,
+                "focus": {
+                  "x": 0.5,
+                  "y": 0.5
+                }
+              },
+              "end": {
+                "scale": 1.124,
+                "focus": {
+                  "x": 0.5,
+                  "y": 0.44
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "cue-f-loop-flash-1",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 0.5
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-f-loop-flash-2",
+          "at": {
+            "beats": 4
+          },
+          "duration": {
+            "beats": 0.5
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-f-loop-flash-3",
+          "at": {
+            "beats": 8
+          },
+          "duration": {
+            "beats": 0.5
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-f-loop-flash-4",
+          "at": {
+            "beats": 12
+          },
+          "duration": {
+            "beats": 0.5
+          },
+          "clipId": "clip-6",
+          "source": {
+            "startSeconds": 0.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 10,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "cue-g-loop",
+      "name": "Cue G · Call/response",
+      "length": {
+        "bars": 8
+      },
+      "repeat": true,
+      "events": [
+        {
+          "id": "cue-g-loop-a",
+          "at": {
+            "beats": 0
+          },
+          "duration": {
+            "beats": 30
+          },
+          "clipId": "clip-7",
+          "source": {
+            "startSeconds": 1,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        },
+        {
+          "id": "cue-g-loop-b",
+          "at": {
+            "beats": 30
+          },
+          "duration": {
+            "beats": 2
+          },
+          "clipId": "clip-8",
+          "source": {
+            "startSeconds": 1.5,
+            "loop": true,
+            "rate": 1
+          },
+          "appearance": {
+            "z": 0,
+            "opacity": 1,
+            "blendMode": "normal",
+            "fit": "cover",
+            "filters": []
+          }
+        }
+      ]
+    }
+  ],
+  "defaultLoopId": "song-default",
+  "cueBindings": [
+    {
+      "input": "hotCueA",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 2
+        }
+      },
+      "visual": {
+        "loopId": "cue-a-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    },
+    {
+      "input": "hotCueB",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 3
+        }
+      },
+      "visual": {
+        "loopId": "cue-b-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    },
+    {
+      "input": "hotCueC",
+      "cue": {
+        "type": "jump"
+      },
+      "visual": {
+        "loopId": "cue-c-loop",
+        "retrigger": "cue-trigger"
+      }
+    },
+    {
+      "input": "hotCueD",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 1
+        }
+      },
+      "visual": {
+        "loopId": "cue-d-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    },
+    {
+      "input": "hotCueE",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 2
+        }
+      },
+      "visual": {
+        "loopId": "cue-e-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    },
+    {
+      "input": "hotCueF",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 4
+        }
+      },
+      "visual": {
+        "loopId": "cue-f-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    },
+    {
+      "input": "hotCueG",
+      "cue": {
+        "type": "loop",
+        "length": {
+          "bars": 8
+        }
+      },
+      "visual": {
+        "loopId": "cue-g-loop",
+        "retrigger": "audio-loop-cycle"
+      }
+    }
+  ],
+  "randomLoop": {
+    "id": "random-loop",
+    "recipes": [
+      "sequence",
+      "alternate",
+      "flash-overlay",
+      "call-response",
+      "crossfade"
+    ],
+    "lengths": [
+      {
+        "bars": 1
+      },
+      {
+        "bars": 2
+      },
+      {
+        "bars": 4
+      }
+    ],
+    "candidateClipIds": [
+      "clip-1",
+      "clip-2",
+      "clip-3",
+      "clip-4",
+      "clip-5",
+      "clip-6",
+      "clip-7",
+      "clip-8"
+    ],
+    "fit": "cover"
+  },
+  "advance": {
+    "afterSongs": 1
+  }
+}

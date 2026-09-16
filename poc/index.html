@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Sync · Rekordbox emulator</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23090b0e'/%3E%3Cpath d='M17 14h30v8H25v8h18v8H25v12h-8z' fill='%23e7eef7'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="bridge-drawer-toggle" class="bridge-drawer-toggle" type="button" aria-controls="bridge-drawer" aria-expanded="false" aria-label="Open live bridge event log">
+          <span class="bridge-indicator" aria-hidden="true"></span>
+          <span>Bridge</span>
+        </button>
+        <div class="brand"><h1>Video Sync</h1><span>Rekordbox input emulator · two-deck visual mix</span></div>
+      </div>
+      <div class="top-actions" aria-label="Tempo and output controls">
+        <div class="tempo-controls">
+          <label for="bpm">BPM</label>
+          <input id="bpm" class="bpm-input" type="number" min="20" max="300" value="100.00" step="0.01" inputmode="decimal" aria-label="Session BPM">
+          <button id="metronome" type="button" aria-pressed="false">Metronome off</button>
+        </div>
+        <button id="open-output" class="primary" type="button">Open projector output</button>
+      </div>
+    </header>
+
+    <div id="bridge-drawer-backdrop" class="bridge-drawer-backdrop" aria-hidden="true"></div>
+    <aside id="bridge-drawer" class="bridge-drawer" role="dialog" aria-modal="true" aria-labelledby="bridge-drawer-title" aria-hidden="true" inert>
+      <div class="bridge-drawer-header">
+        <div>
+          <h2 id="bridge-drawer-title">Live bridge</h2>
+          <span id="bridge-status">Connecting</span>
+        </div>
+        <button id="bridge-drawer-close" class="icon-button" type="button" aria-label="Close live bridge event log">×</button>
+      </div>
+      <div class="bridge-summary">
+        <div><span>Link</span><strong id="bridge-link">Waiting</strong></div>
+        <div><span>Rekordbox</span><strong id="bridge-rekordbox">Starting</strong></div>
+        <div><span>MIDI</span><strong id="bridge-midi">0 messages</strong></div>
+      </div>
+      <div class="feed-heading"><span>Event feed</span><span>Newest at bottom</span></div>
+      <ol id="bridge-events" class="bridge-events" role="log" aria-live="polite" aria-relevant="additions" tabindex="0"><li class="is-placeholder">Waiting for bridge data…</li></ol>
+    </aside>
+
+    <div class="layout">
+      <div class="main-column">
+        <section class="preview-wrap" aria-label="Mixed visual output preview">
+          <div id="preview-stage" class="stage">
+            <div class="stage-hud" aria-hidden="true">
+              <span>D1 <strong data-deck-opacity="1">0%</strong></span>
+              <span>D2 <strong data-deck-opacity="2">0%</strong></span>
+            </div>
+          </div>
+          <div class="mix-meter" aria-label="Normalized visual opacity">
+            <div id="deck-1-mix" class="mix-meter-deck mix-meter-one"></div>
+            <div id="deck-2-mix" class="mix-meter-deck mix-meter-two"></div>
+          </div>
+          <div class="phrase-counter is-inactive">
+            <div id="phrase-timeline" class="phrase-timeline" role="progressbar" aria-label="Position in repeating 16-bar phrase" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-disabled="true">
+              <span data-phrase-bar="1"><b>1</b></span><span data-phrase-bar="2"><b>2</b></span><span data-phrase-bar="3"><b>3</b></span><span data-phrase-bar="4"><b>4</b></span>
+              <span data-phrase-bar="5"><b>5</b></span><span data-phrase-bar="6"><b>6</b></span><span data-phrase-bar="7"><b>7</b></span><span data-phrase-bar="8"><b>8</b></span>
+              <span data-phrase-bar="9"><b>9</b></span><span data-phrase-bar="10"><b>10</b></span><span data-phrase-bar="11"><b>11</b></span><span data-phrase-bar="12"><b>12</b></span>
+              <span data-phrase-bar="13"><b>13</b></span><span data-phrase-bar="14"><b>14</b></span><span data-phrase-bar="15"><b>15</b></span><span data-phrase-bar="16"><b>16</b></span>
+            </div>
+            <div id="cue-timeline" class="cue-timeline" aria-label="Selected hot cues on the 16-bar phrase">
+              <div class="cue-lane cue-lane-one" data-cue-lane="1" hidden><div class="cue-track"></div></div>
+              <div class="cue-lane cue-lane-two" data-cue-lane="2" hidden><div class="cue-track"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel mixer-panel">
+          <div class="crossfader-control">
+            <strong id="deck-1-mix-readout">0%</strong>
+            <input id="crossfader" type="range" min="0" max="100" value="50" aria-label="Simulated crossfader">
+            <strong id="deck-2-mix-readout">0%</strong>
+          </div>
+        </section>
+
+        <section class="deck-grid" aria-label="Deck emulation controls">
+          <article id="deck-1" class="deck panel" data-deck-card="1">
+            <div class="deck-head">
+              <div class="platter" aria-hidden="true"><div class="platter-core"><span></span></div></div>
+              <div><span class="deck-kicker">Deck 1</span><strong id="deck-1-state" class="deck-state">empty</strong></div>
+              <div class="deck-head-actions">
+                <button data-load-deck="1" class="icon-button reload-button" type="button" aria-label="Load deck 1" title="Load deck 1"><span aria-hidden="true">↻</span></button>
+                <button data-play-deck="1" class="icon-button play-button" type="button" aria-label="Play deck 1" title="Play deck 1"><span aria-hidden="true">▶</span></button>
+              </div>
+            </div>
+            <label for="deck-1-scene">Visual scene</label>
+            <select id="deck-1-scene" data-scene-deck="1"></select>
+            <p class="active-loop-readout">Visual loop <strong data-active-loop="1">Default sequence</strong></p>
+            <div class="level-head"><label for="deck-1-level">Channel level</label><span id="deck-1-level-value">100%</span></div>
+            <input id="deck-1-level" data-level-deck="1" type="range" min="0" max="100" value="100">
+            <div class="cue-grid" aria-label="Deck 1 visual cue mappings">
+              <button data-cue-deck="1" data-cue="0" type="button">A</button>
+              <button data-cue-deck="1" data-cue="1" type="button">B</button>
+              <button data-cue-deck="1" data-cue="2" type="button">C</button>
+              <button data-cue-deck="1" data-cue="3" type="button">D</button>
+              <button data-cue-deck="1" data-cue="4" type="button">E</button>
+              <button data-cue-deck="1" data-cue="5" type="button">F</button>
+              <button data-cue-deck="1" data-cue="6" type="button">G</button>
+              <button data-cue-deck="1" data-cue="7" type="button">H</button>
+            </div>
+            <div class="cue-detail" data-cue-detail="1" hidden></div>
+          </article>
+
+          <article id="deck-2" class="deck panel" data-deck-card="2">
+            <div class="deck-head">
+              <div class="platter" aria-hidden="true"><div class="platter-core"><span></span></div></div>
+              <div><span class="deck-kicker">Deck 2</span><strong id="deck-2-state" class="deck-state">empty</strong></div>
+              <div class="deck-head-actions">
+                <button data-load-deck="2" class="icon-button reload-button" type="button" aria-label="Load deck 2" title="Load deck 2"><span aria-hidden="true">↻</span></button>
+                <button data-play-deck="2" class="icon-button play-button" type="button" aria-label="Play deck 2" title="Play deck 2"><span aria-hidden="true">▶</span></button>
+              </div>
+            </div>
+            <label for="deck-2-scene">Visual scene</label>
+            <select id="deck-2-scene" data-scene-deck="2"></select>
+            <p class="active-loop-readout">Visual loop <strong data-active-loop="2">Default sequence</strong></p>
+            <div class="level-head"><label for="deck-2-level">Channel level</label><span id="deck-2-level-value">100%</span></div>
+            <input id="deck-2-level" data-level-deck="2" type="range" min="0" max="100" value="100">
+            <div class="cue-grid" aria-label="Deck 2 visual cue mappings">
+              <button data-cue-deck="2" data-cue="0" type="button">A</button>
+              <button data-cue-deck="2" data-cue="1" type="button">B</button>
+              <button data-cue-deck="2" data-cue="2" type="button">C</button>
+              <button data-cue-deck="2" data-cue="3" type="button">D</button>
+              <button data-cue-deck="2" data-cue="4" type="button">E</button>
+              <button data-cue-deck="2" data-cue="5" type="button">F</button>
+              <button data-cue-deck="2" data-cue="6" type="button">G</button>
+              <button data-cue-deck="2" data-cue="7" type="button">H</button>
+            </div>
+            <div class="cue-detail" data-cue-detail="2" hidden></div>
+          </article>
+        </section>
+      </div>
+
+      <div
+        id="pane-resizer"
+        class="pane-resizer"
+        role="separator"
+        aria-label="Resize preview and control panes"
+        aria-orientation="vertical"
+        aria-valuemin="35"
+        aria-valuemax="75"
+        aria-valuenow="65"
+        tabindex="0"
+        title="Drag to resize panes; double-click to reset"
+      ></div>
+
+      <aside class="sidebar">
+        <section class="panel scene-queue-panel">
+          <div class="panel-heading"><h2>Scene sequencer</h2><span id="scene-queue-status">Next load</span></div>
+          <ol id="scene-queue" class="scene-queue" aria-label="Ordered scene sequence"></ol>
+          <div class="scene-queue-footer">
+            <p id="scene-catalog-count" class="scene-catalog-count">Loading scene catalog…</p>
+            <div class="scene-queue-actions">
+              <button id="scene-queue-add" type="button">+ Add item</button>
+              <button id="scene-queue-restart" type="button">Restart</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel fx-panel">
+          <div class="panel-heading"><h2>Beat FX → video</h2><span id="beatfx-status">Off</span></div>
+          <div class="fx-controls">
+            <label for="beatfx-select"><span>Effect</span><select id="beatfx-select"></select></label>
+            <label for="beatfx-target"><span>Target</span><select id="beatfx-target">
+                <option value="master">Master</option>
+                <option value="deck1">Deck 1</option>
+                <option value="deck2">Deck 2</option>
+                <option value="deck3">Deck 3 / none</option>
+                <option value="deck4">Deck 4 / none</option>
+                <option value="sampler">Sampler / none</option>
+              </select></label>
+          </div>
+          <div class="row fx-actions">
+            <button id="beatfx-toggle" type="button" aria-pressed="false">FX off</button>
+            <button id="beatfx-down" type="button" aria-label="Shorter Beat FX interval">− beat</button>
+            <strong id="beatfx-beats" class="fx-beat-readout">1 beat</strong>
+            <button id="beatfx-up" type="button" aria-label="Longer Beat FX interval">+ beat</button>
+          </div>
+          <div class="level-head"><label for="beatfx-depth">Level / depth</label><span id="beatfx-depth-value">50%</span></div>
+          <input id="beatfx-depth" type="range" min="0" max="100" value="50">
+        </section>
+
+      </aside>
+    </div>
+  </main>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

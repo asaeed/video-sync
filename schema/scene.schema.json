@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-sync.local/schema/scene.schema.json",
+  "title": "Video Sync scene",
+  "description": "Implemented persistent visual-loop scene contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "clips", "visualLoops", "defaultLoopId", "cueBindings", "advance"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 4 },
+    "id": { "$ref": "#/$defs/id" },
+    "name": { "type": "string", "minLength": 1 },
+    "clips": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/clip" } },
+    "visualLoops": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/visualLoop" } },
+    "defaultLoopId": { "$ref": "#/$defs/id" },
+    "cueBindings": { "type": "array", "items": { "$ref": "#/$defs/cueBinding" } },
+    "randomLoop": { "$ref": "#/$defs/randomLoop" },
+    "advance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["afterSongs"],
+      "properties": { "afterSongs": { "type": "integer", "minimum": 1 } }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "musicalPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bars": { "type": "number", "minimum": 0 },
+        "beats": { "type": "number", "minimum": 0 }
+      }
+    },
+    "musicalDuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bars": { "type": "number", "exclusiveMinimum": 0 },
+        "beats": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "file"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "startSeconds": { "type": "number", "minimum": 0 },
+        "subjectFocus": { "$ref": "#/$defs/normalizedPoint" }
+      }
+    },
+    "randomLoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "recipes", "lengths", "candidateClipIds", "fit"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "recipes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["sequence", "alternate", "flash-overlay", "call-response", "crossfade"] }
+        },
+        "lengths": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/musicalDuration" } },
+        "candidateClipIds": { "type": "array", "minItems": 2, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "fit": { "enum": ["cover", "contain"] }
+      }
+    },
+    "visualLoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "length", "repeat", "events"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "length": { "$ref": "#/$defs/musicalDuration" },
+        "repeat": { "const": true },
+        "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/timelineEvent" } }
+      }
+    },
+    "timelineEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at", "duration", "clipId", "source", "appearance"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "at": { "$ref": "#/$defs/musicalPosition" },
+        "duration": { "$ref": "#/$defs/musicalDuration" },
+        "clipId": { "$ref": "#/$defs/id" },
+        "source": { "$ref": "#/$defs/sourcePlayback" },
+        "appearance": { "$ref": "#/$defs/appearance" }
+      }
+    },
+    "sourcePlayback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startSeconds", "loop"],
+      "properties": {
+        "startSeconds": { "type": "number", "minimum": 0 },
+        "loop": { "type": "boolean" },
+        "rate": { "type": "number", "exclusiveMinimum": 0, "default": 1 }
+      }
+    },
+    "filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["grayscale", "invert", "contrast", "hue-rotate"] },
+        "amount": { "type": "number" },
+        "degrees": { "type": "number" }
+      }
+    },
+    "opacityEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "curve"],
+      "properties": {
+        "from": { "type": "number", "minimum": 0, "maximum": 1 },
+        "to": { "type": "number", "minimum": 0, "maximum": 1 },
+        "curve": { "const": "linear" }
+      }
+    },
+    "normalizedPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "motionKeyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scale", "focus"],
+      "properties": {
+        "scale": { "type": "number", "minimum": 1, "maximum": 2 },
+        "focus": { "$ref": "#/$defs/normalizedPoint" }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "progress", "easing", "start", "end"],
+      "properties": {
+        "type": { "const": "ken-burns" },
+        "focusSource": { "const": "clip-subject" },
+        "progress": { "enum": ["event", "loop"] },
+        "easing": { "enum": ["linear", "ease-in-out"] },
+        "start": { "$ref": "#/$defs/motionKeyframe" },
+        "end": { "$ref": "#/$defs/motionKeyframe" }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["z", "opacity", "blendMode", "fit", "filters"],
+      "properties": {
+        "z": { "type": "integer" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "blendMode": { "enum": ["normal", "screen", "multiply", "plus-lighter"] },
+        "fit": { "enum": ["cover", "contain"] },
+        "filters": { "type": "array", "items": { "$ref": "#/$defs/filter" } },
+        "opacityEnvelope": { "$ref": "#/$defs/opacityEnvelope" },
+        "motion": { "$ref": "#/$defs/motion" }
+      }
+    },
+    "cueBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "cue", "visual"],
+      "properties": {
+        "input": { "type": "string", "pattern": "^hotCue[A-H]$" },
+        "cue": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "length"],
+              "properties": {
+                "type": { "const": "loop" },
+                "length": { "$ref": "#/$defs/musicalDuration" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type"],
+              "properties": { "type": { "const": "jump" } }
+            }
+          ]
+        },
+        "visual": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["loopId", "retrigger"],
+          "properties": {
+            "loopId": { "$ref": "#/$defs/id" },
+            "retrigger": { "enum": ["audio-loop-cycle", "cue-trigger"] }
+          }
+        }
+      }
+    }
+  }
+}

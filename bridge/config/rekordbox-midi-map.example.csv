@@ -1,0 +1,9 @@
+# event,status,data1,deck,value_mode
+# Assign unused MIDI messages to Rekordbox Indicator functions, then replace
+# the placeholder status/data1 bytes below with values captured by this bridge.
+# value_mode is button, cc7, or cc14. A cc14 row treats data1 as its MSB and
+# data1 + 32 as its LSB, then emits one normalized value when the LSB arrives.
+# deck.play,0x90,0x10,1,button
+# deck.play,0x91,0x10,2,button
+# hotcue.a,0x90,0x20,1,button
+# mixer.crossfader,0xB6,0x1F,0,cc14

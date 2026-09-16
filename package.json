@@ -1,0 +1,21 @@
+{
+  "name": "video-sync",
+  "description": "Beat-synchronous browser visuals driven by Rekordbox, Ableton Link, and controller MIDI.",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asaeed/video-sync.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "bridge:build": "cmake -S bridge -B .build/bridge -DCMAKE_BUILD_TYPE=Release && cmake --build .build/bridge --parallel",
+    "media:archive": "node scripts/fetch-archive-scene.mjs",
+    "media:validate": "node scripts/validate-scene-catalog.mjs",
+    "scenes:export": "node scripts/export-scene-contracts.mjs",
+    "dev": "node poc/server.mjs",
+    "test": "node --test poc/tests/*.test.mjs"
+  }
+}

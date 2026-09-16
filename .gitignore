@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+.build/
+dist/
+*.log
+*.jsonl
+
+# Performance media is generated locally from separately reviewed sources.
+# Do not commit source films or rendered excerpts to the public repository.
+assets/scenes/
+*.avi
+*.mkv
+*.mov
+*.mp4
+*.webm

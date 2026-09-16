@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Sync · interface directions</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2308090a'/%3E%3Cpath d='M17 14h30v8H25v8h18v8H25v12h-8z' fill='%23d6f4f6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="directions-shell">
+    <header class="directions-header">
+      <div>
+        <a class="eyebrow" href="../../poc/">Video Sync / Studio</a>
+        <h1>Pick the interface, not a footage filter.</h1>
+        <p>These are ten ways the operator UI could feel. The videos below are the same raw source files in every direction; color treatment belongs to an optional scene rule, never the app skin.</p>
+      </div>
+      <nav aria-label="Project pages"><a href="../schema/">Schema &amp; inputs</a><a href="../../poc/">RB emulator</a></nav>
+    </header>
+
+    <section class="raw-reel" aria-labelledby="raw-reel-title">
+      <div class="reel-copy"><span class="eyebrow">Film scenes / raw playback</span><h2 id="raw-reel-title">Three film excerpts. Zero default app filters.</h2></div>
+      <div class="reel-videos">
+        <figure><video src="../../assets/scenes/metropolis/robot-reveal.mp4" muted loop playsinline autoplay preload="metadata"></video><figcaption>01 / Metropolis Machine</figcaption></figure>
+        <figure><video src="../../assets/scenes/nosferatu/clip-1.mp4" muted loop playsinline autoplay preload="metadata"></video><figcaption>02 / Nosferatu</figcaption></figure>
+        <figure><video src="../../assets/scenes/movie-camera/clip-3.mp4" muted loop playsinline autoplay preload="metadata"></video><figcaption>03 / Man with a Movie Camera</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="selection-strip" aria-live="polite">
+      <span class="selection-label">UI directions selected</span>
+      <strong id="selection-summary">None yet</strong>
+      <span id="selection-count">0 / 3</span>
+    </section>
+
+    <section class="direction-grid" aria-label="Interface direction choices">
+      <button class="direction utility" type="button" data-direction="utility-dark" data-name="Utility Dark" aria-pressed="false">
+        <span class="mock"><i class="top"></i><i class="screen"></i><i class="rail"></i><i class="rail two"></i><i class="status"></i></span>
+        <span class="number">01</span><strong>Utility Dark</strong><span class="recipe">Dense, sober controls · information first · smallest GPU/visual overhead</span>
+      </button>
+      <button class="direction mirror" type="button" data-direction="deck-mirror" data-name="Deck Mirror" aria-pressed="false">
+        <span class="mock"><i class="top"></i><i class="deck left"></i><i class="screen"></i><i class="deck right"></i><i class="fade"></i></span>
+        <span class="number">02</span><strong>Deck Mirror</strong><span class="recipe">Symmetric deck cards · familiar DJ mapping · immediate live-state confidence</span>
+      </button>
+      <button class="direction stagefirst" type="button" data-direction="stage-first" data-name="Stage First" aria-pressed="false">
+        <span class="mock"><i class="screen"></i><i class="floating"></i><i class="dock"></i></span>
+        <span class="number">03</span><strong>Stage First</strong><span class="recipe">Huge program preview · controls float at edges · projector image dominates</span>
+      </button>
+      <button class="direction editorial" type="button" data-direction="editorial-light" data-name="Editorial Light" aria-pressed="false">
+        <span class="mock"><i class="top"></i><i class="title"></i><i class="screen"></i><i class="copy"></i><i class="copy short"></i></span>
+        <span class="number">04</span><strong>Editorial Light</strong><span class="recipe">Bright authoring workspace · generous type · comfortable long edit sessions</span>
+      </button>
+      <button class="direction signal" type="button" data-direction="signal-console" data-name="Signal Console" aria-pressed="false">
+        <span class="mock"><i class="scope"></i><i class="meter"></i><i class="screen"></i><i class="log"></i><i class="log second"></i></span>
+        <span class="number">05</span><strong>Signal Console</strong><span class="recipe">Clock and bridge health foregrounded · diagnostic · technical confidence</span>
+      </button>
+      <button class="direction hardware" type="button" data-direction="hardware-black" data-name="Hardware Black" aria-pressed="false">
+        <span class="mock"><i class="screen"></i><i class="knob a"></i><i class="knob b"></i><i class="knob c"></i><i class="buttonrow"></i></span>
+        <span class="number">06</span><strong>Hardware Black</strong><span class="recipe">Tactile spacing · high-contrast state lights · controller-like muscle memory</span>
+      </button>
+      <button class="direction calm" type="button" data-direction="calm-auto" data-name="Calm Auto" aria-pressed="false">
+        <span class="mock"><i class="screen"></i><i class="state"></i><i class="next"></i><i class="tiny"></i></span>
+        <span class="number">07</span><strong>Calm Auto</strong><span class="recipe">Only current, next, and health · strongest set-and-forget posture</span>
+      </button>
+      <button class="direction modular" type="button" data-direction="modular-panels" data-name="Modular Panels" aria-pressed="false">
+        <span class="mock"><i class="panel one"></i><i class="panel two"></i><i class="panel three"></i><i class="panel four"></i></span>
+        <span class="number">08</span><strong>Modular Panels</strong><span class="recipe">Rearrangeable work areas · grows cleanly · more setup and configuration</span>
+      </button>
+      <button class="direction timeline" type="button" data-direction="timeline-focus" data-name="Timeline Focus" aria-pressed="false">
+        <span class="mock"><i class="screen"></i><i class="track a"></i><i class="track b"></i><i class="playhead"></i></span>
+        <span class="number">09</span><strong>Timeline Focus</strong><span class="recipe">Sequence rules shown musically · best for authoring · less minimal live</span>
+      </button>
+      <button class="direction docked" type="button" data-direction="compact-dock" data-name="Compact Dock" aria-pressed="false">
+        <span class="mock"><i class="screen"></i><i class="dock"></i><i class="dot a"></i><i class="dot b"></i><i class="dot c"></i></span>
+        <span class="number">10</span><strong>Compact Dock</strong><span class="recipe">One narrow control strip · preview stays large · ideal secondary display companion</span>
+      </button>
+    </section>
+
+    <footer><p>Choose up to three. Selection is saved locally in this browser.</p><a href="../../assets/README.md">Source and rights notes</a></footer>
+  </main>
+  <script type="module" src="directions.mjs"></script>
+</body>
+</html>

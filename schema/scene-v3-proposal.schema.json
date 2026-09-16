@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-sync.local/schema/scene-v3-proposal.schema.json",
+  "title": "Deprecated Video Sync v3 proposal alias",
+  "description": "Version 4 is implemented. Use scene.schema.json.",
+  "deprecated": true,
+  "$ref": "./scene.schema.json"
+}

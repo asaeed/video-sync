@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Sync · scene schema and inputs</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%230b0e10'/%3E%3Cpath d='M17 14h30v8H25v8h18v8H25v12h-8z' fill='%23dff4f7'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="schema-shell">
+    <header class="schema-header">
+      <div>
+        <a class="eyebrow" href="../../poc/">Video Sync / Studio</a>
+        <h1>Clips feed loops. Configured cues select one.</h1>
+        <p>A scene owns numbered clips plus one or more visual loops. Normal deck playback holds the default loop; each configured hot cue selects another loop and leaves it active until a later cue or scene change.</p>
+      </div>
+      <nav aria-label="Project pages"><a href="../../poc/">RB emulator</a><a href="../visual-directions/">UI directions</a></nav>
+    </header>
+
+    <section class="model-flow" aria-label="Scene data flow">
+      <div><span>01</span><strong>Clips</strong><small>File + playback identity</small></div>
+      <i aria-hidden="true">→</i>
+      <div><span>02</span><strong>Visual loops</strong><small>Length + repeating timeline</small></div>
+      <i aria-hidden="true">→</i>
+      <div><span>03</span><strong>Timeline events</strong><small>Clip + source time + appearance</small></div>
+      <i aria-hidden="true">→</i>
+      <div><span>04</span><strong>Per-deck output</strong><small>Starts and freezes with deck</small></div>
+      <i aria-hidden="true">→</i>
+      <div><span>05</span><strong>Visual mix</strong><small>Normalized to 100%</small></div>
+    </section>
+
+    <section class="schema-section rule-explorer">
+      <div class="section-copy">
+        <span class="section-number">A</span>
+        <h2>Implemented v4 contract</h2>
+        <p>The browser engine now consumes this visual-loop model directly. Raw video remains the default. A filter belongs to one timeline event, so the same clip can be raw in one loop and altered in another without changing the source media.</p>
+        <div class="rule-buttons" aria-label="Schema fragment selector">
+          <button type="button" data-fragment="clip" aria-pressed="true">Clip</button>
+          <button type="button" data-fragment="loop" aria-pressed="false">Visual loop</button>
+          <button type="button" data-fragment="event" aria-pressed="false">Timeline event</button>
+          <button type="button" data-fragment="loopCue" aria-pressed="false">Cue → loop</button>
+          <button type="button" data-fragment="jumpCue" aria-pressed="false">Jump cue → loop</button>
+        </div>
+        <p id="fragment-description" class="fragment-description" aria-live="polite"></p>
+      </div>
+      <pre aria-label="Selected JSON schema example"><code id="schema-code"></code></pre>
+    </section>
+
+    <section class="schema-section mix-lab">
+      <div class="section-copy">
+        <span class="section-number">B</span>
+        <h2>Deck-to-visual mixing</h2>
+        <p>For each loaded deck, raw visual weight is <code>channel level × crossfader gain</code>. We normalize the two weights so visible deck opacity totals 100%. Play/pause changes motion, not this weighting: a paused deck can remain as a frozen image until faded out.</p>
+        <label class="check"><input id="mix-loaded-1" type="checkbox" checked> Deck 1 loaded</label>
+        <label class="check"><input id="mix-loaded-2" type="checkbox" checked> Deck 2 loaded</label>
+      </div>
+      <div class="mix-controls">
+        <div class="mix-result" aria-live="polite">
+          <div id="mix-one"><strong>50%</strong><span>Deck 1</span></div>
+          <div id="mix-two"><strong>50%</strong><span>Deck 2</span></div>
+        </div>
+        <label for="mix-cross">Crossfader <output id="mix-cross-value">50</output></label>
+        <input id="mix-cross" type="range" min="0" max="100" value="50">
+        <div class="level-pair">
+          <label for="mix-level-1">Deck 1 level <output id="mix-level-1-value">100%</output><input id="mix-level-1" type="range" min="0" max="100" value="100"></label>
+          <label for="mix-level-2">Deck 2 level <output id="mix-level-2-value">100%</output><input id="mix-level-2" type="range" min="0" max="100" value="100"></label>
+        </div>
+        <p id="mix-equation" class="mix-equation"></p>
+      </div>
+    </section>
+
+    <section class="inputs-section">
+      <div class="inputs-heading"><span class="section-number">C</span><h2>What we can actually receive</h2></div>
+      <div class="input-grid">
+        <article class="input-source source-direct">
+          <div class="source-head"><strong>Ableton Link</strong><span>Direct</span></div>
+          <p>Shared musical clock, not Rekordbox deck telemetry.</p>
+          <ul><li>Tempo / BPM</li><li>Beat ↔ monotonic-time mapping</li><li>Beat alignment and phase for a chosen quantum</li><li>Optional shared start/stop intent</li><li>Peer/session connectivity</li></ul>
+          <small>Does not identify decks, tracks, hot cues, faders, or the Rekordbox sync master.</small>
+        </article>
+        <article class="input-source source-candidate">
+          <div class="source-head"><strong>Rekordbox MIDI output</strong><span>Limited</span></div>
+          <p>Software-confirmed indicator states routed to MIDI equipment.</p>
+          <ul><li>Mapped feature illumination on/off</li><li>Potential play/cue indicator feedback</li><li>Selected equipment destination</li></ul>
+          <small>MIDI Learn is not a general software event socket. The tested virtual destination received no Rekordbox data.</small>
+        </article>
+        <article class="input-source source-candidate">
+          <div class="source-head"><strong>DDJ-GRV6 MIDI</strong><span>Confirmed on macOS</span></div>
+          <p>Published controller gestures and positions.</p>
+          <ul><li>Play/cue and performance-pad presses</li><li>Channel-fader positions</li><li>Crossfader position</li><li>Trim, EQ, and effect controls</li><li>Deck-specific MIDI channels</li></ul>
+          <small>A passive second client received controls while Rekordbox played. These are performer gestures—not measured audio levels or every software-originated state change.</small>
+        </article>
+        <article class="input-source source-derived">
+          <div class="source-head"><strong>Video Sync bridge</strong><span>Derived</span></div>
+          <p>Timestamped Link snapshots plus raw and normalized controller MIDI.</p>
+          <ul><li>Visual deck playing/paused state</li><li>Loaded-track generation</li><li>Normalized visual opacity</li><li>Dominant deck</li><li>Scene instance and visual-loop clock</li></ul>
+          <small>Link remains read-only. MIDI mappings come from AlphaTheta's device table and are checked against raw performance captures.</small>
+        </article>
+        <article class="input-source source-offline">
+          <div class="source-head"><strong>Rekordbox analysis</strong><span>Offline/enrichment</span></div>
+          <p>Useful local-library data, but no documented live API.</p>
+          <ul><li>Analyzed BPM and beat grid</li><li>Stored hot-cue positions</li><li>Phrase analysis where available</li><li>Track identity and metadata</li></ul>
+          <small>Useful later for authoring and reconciliation. It does not supply the live audible deck or playhead through Ableton Link.</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="contract-note">
+      <strong>Direction status</strong>
+      <span>The browser player runs the v4 loop contract. The native bridge reads Link plus the GRV6 directly and can drive transport, cues, and normalized visual mixing; audio-loop reset signals and Windows coexistence remain unverified.</span>
+      <a href="../../docs/08-direction-validation.md">Read the critique</a>
+    </section>
+  </main>
+  <script type="module" src="schema.mjs"></script>
+</body>
+</html>

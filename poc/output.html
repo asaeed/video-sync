@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Sync Output</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23000'/%3E%3Cpath d='M17 14h30v8H25v8h18v8H25v12h-8z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="output-body">
+  <div id="output-stage" class="stage output-stage" aria-label="Projector output"></div>
+  <div id="diagnostics" class="diagnostics" hidden></div>
+  <div id="output-help" class="output-help">
+    <span>Move this window to the projector.</span>
+    <button id="fullscreen" class="primary" type="button">Full screen</button>
+  </div>
+  <script type="module" src="output.mjs"></script>
+</body>
+</html>
