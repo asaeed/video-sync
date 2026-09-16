@@ -9,8 +9,7 @@ Video Sync turns DJ performance data into edited video sequences on a separate p
 > **Status:** experimental proof of concept. The current live integration is tested on macOS with Rekordbox 7.2.2 and an AlphaTheta DDJ-GRV6. The browser runtime and scene format are designed to remain cross-platform, but Windows deck-state integration is not implemented yet.
 
 <p align="center">
-  <img src="assets/previews/metropolis-robot.jpg" alt="Metropolis robot preview" width="48%">
-  <img src="assets/previews/metropolis-rings.jpg" alt="Metropolis rings preview" width="48%">
+  <img src="docs/images/emulator.png" alt="Video Sync emulator showing the two-deck video mixer, 16-bar phrase display, scene sequencer, deck controls, Hot Cue mappings, and Beat FX controls">
 </p>
 
 ## What works now
