@@ -1,6 +1,6 @@
 {
   "name": "video-sync",
-  "description": "Low-latency, beat-synchronous video visuals for Rekordbox with a browser renderer, scene sequencer, and Link/MIDI bridge.",
+  "description": "Low-latency, beat-synchronous video visuals for Rekordbox with a browser renderer, scene sequencer, and controller-agnostic MIDI bridge.",
   "private": true,
   "type": "module",
   "repository": {

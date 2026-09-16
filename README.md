@@ -6,10 +6,17 @@ Low-latency, beat-synchronous film visuals for Rekordbox DJ sets.
 
 Video Sync turns DJ performance data into edited video sequences on a separate projector display. It follows two Rekordbox decks, mixes their visual opacity with the channel levels and crossfader, maps Hot Cues and Beat FX to visual changes, and advances through an ordered queue of reusable scenes.
 
-> **Status:** experimental proof of concept. The current live integration is tested on macOS with Rekordbox 7.2.2 and an AlphaTheta DDJ-GRV6. The browser runtime and scene format are designed to remain cross-platform, but Windows deck-state integration is not implemented yet.
+> **Status:** experimental proof of concept. The current live integration is tested on macOS with Rekordbox 7.2.2; the AlphaTheta DDJ-GRV6 is the first bundled and hardware-tested controller profile. The browser runtime and scene format are designed to remain cross-platform, but Windows deck-state integration is not implemented yet.
+
+Video Sync is not tied to the GRV6. Controller-specific MIDI messages are translated through a configurable profile into shared transport, cue, mixer, and effect events. Any controller whose MIDI can be observed alongside Rekordbox can be supported with an appropriate mapping; each device still needs live coexistence and control validation.
 
 <p align="center">
   <img src="docs/images/emulator.png" alt="Video Sync emulator showing the two-deck video mixer, 16-bar phrase display, scene sequencer, deck controls, Hot Cue mappings, and Beat FX controls">
+</p>
+
+<p align="center">
+  <img src="assets/previews/metropolis-robot.jpg" alt="Metropolis robot preview" width="48%">
+  <img src="assets/previews/metropolis-rings.jpg" alt="Metropolis rings preview" width="48%">
 </p>
 
 ## What works now
@@ -17,7 +24,7 @@ Video Sync turns DJ performance data into edited video sequences on a separate p
 - Independent two-deck video playback with load, play, pause, freeze, and first-frame preview states.
 - A normalized visual mix: deck levels and the crossfader determine relative opacity, totaling 100% when either deck is visible.
 - Automatic BPM, playhead, and visible Hot Cue timestamps from Rekordbox on macOS.
-- DDJ-GRV6 MIDI mappings for transport, Load, Hot Cues A-H, channel levels, crossfader, and Beat FX.
+- A controller-agnostic MIDI mapping layer for transport, Load, Hot Cues A-H, channel levels, crossfader, and Beat FX, with a bundled DDJ-GRV6 profile.
 - Passive Hot Cue crossings that start the assigned visual loop at the musical offset where the cue was actually crossed.
 - Authored two-clip loop recipes: sequence, alternating cuts, flash overlays, call-and-response, and crossfades.
 - Per-appearance source in-points, filters, and subject-aware slow pan/zoom motion.
@@ -30,7 +37,7 @@ Video Sync turns DJ performance data into edited video sequences on a separate p
 ```mermaid
 flowchart LR
     R[Rekordbox] -->|BPM, playhead, cue markers| A[macOS deck-state adapter]
-    C[DDJ-GRV6] -->|MIDI| B[Link and MIDI bridge]
+    C[MIDI controller] -->|Device profile| B[Link and MIDI bridge]
     L[Ableton Link] -. optional clock .-> B
     A --> S[Local Node relay]
     B --> S
@@ -84,7 +91,7 @@ The generator seeks into the configured source and creates separate silent, eigh
 
 ## Use it with Rekordbox
 
-1. Connect the DDJ-GRV6 and open Rekordbox.
+1. Connect your MIDI controller and open Rekordbox.
 2. Load tracks onto Decks 1 and 2.
 3. On macOS, allow the Node executable under **System Settings → Privacy & Security → Accessibility**.
 4. Build the bridge once with `npm run bridge:build`, then start everything with `npm run dev`.
@@ -92,7 +99,7 @@ The generator seeks into the configured source and creates separate silent, eigh
 
 Ableton Link is optional in the current macOS path: the deck-state adapter reads the visible Rekordbox BPM, playhead, and Hot Cue markers directly. If enabling Link changes Rekordbox Beat Sync behavior on your setup, leave Link disabled; the controller and deck-state paths still operate.
 
-Controller Load presses claim the next item in the scene queue. A track loaded only with the mouse or keyboard inside Rekordbox does not currently emit a reliable song-load event, so assign or advance the scene manually in that case.
+Mapped controller Load presses claim the next item in the scene queue. A track loaded only with the mouse or keyboard inside Rekordbox does not currently emit a reliable song-load event, so assign or advance the scene manually in that case.
 
 See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event capture, and custom controller maps.
 
@@ -115,7 +122,7 @@ The current contract is documented in [docs/07-scene-schema.md](docs/07-scene-sc
 | --- | --- |
 | Browser renderer and sequencer | Working proof of concept; Chromium is the primary tested browser |
 | macOS Rekordbox deck state | Working through the Accessibility API for visible Decks 1 and 2 |
-| DDJ-GRV6 MIDI | Working with the checked-in controller profile |
+| Controller MIDI | Profile-driven; the checked-in DDJ-GRV6 mapping is the currently tested reference |
 | Ableton Link observer | Working; optional for the current macOS deck-state path |
 | Windows | C++ bridge is designed to build cross-platform; Rekordbox deck-state integration is still needed |
 | Video output | 1080p target; sustained projector latency and load testing remain to be measured |

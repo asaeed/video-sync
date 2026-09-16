@@ -1,6 +1,8 @@
 # Link and controller MIDI bridge
 
-This spike joins an Ableton Link session as a read-only observer and passively opens the DDJ-GRV6 MIDI input alongside Rekordbox. It emits timestamped JSON Lines to stdout and can append the identical stream to a recording.
+This spike joins an Ableton Link session as a read-only observer and passively opens a configured MIDI controller input alongside Rekordbox. It emits timestamped JSON Lines to stdout and can append the identical stream to a recording.
+
+The event protocol is controller-agnostic: device-specific MIDI messages are normalized through a CSV profile. The DDJ-GRV6 is the first checked-in and hardware-verified profile, not a bridge requirement. Other controllers need a profile plus live confirmation that their MIDI input remains observable while Rekordbox is running.
 
 It deliberately never sends controller MIDI, writes Link tempo/transport state, or treats a gesture as software-confirmed state. The checked-in GRV6 profile is based on AlphaTheta's published message list and verified against raw bytes from the performance computer.
 
