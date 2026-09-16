@@ -14,11 +14,6 @@ Video Sync is not tied to the GRV6. Controller-specific MIDI messages are transl
   <img src="docs/images/emulator.png" alt="Video Sync emulator showing the two-deck video mixer, 16-bar phrase display, scene sequencer, deck controls, Hot Cue mappings, and Beat FX controls">
 </p>
 
-<p align="center">
-  <img src="assets/previews/metropolis-robot.jpg" alt="Metropolis robot preview" width="48%">
-  <img src="assets/previews/metropolis-rings.jpg" alt="Metropolis rings preview" width="48%">
-</p>
-
 ## What works now
 
 - Independent two-deck video playback with load, play, pause, freeze, and first-frame preview states.
@@ -102,6 +97,11 @@ Ableton Link is optional in the current macOS path: the deck-state adapter reads
 Mapped controller Load presses claim the next item in the scene queue. A track loaded only with the mouse or keyboard inside Rekordbox does not currently emit a reliable song-load event, so assign or advance the scene manually in that case.
 
 See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event capture, and custom controller maps.
+
+<p align="center">
+  <img src="assets/previews/metropolis-robot.jpg" alt="Metropolis robot preview" width="48%">
+  <img src="assets/previews/metropolis-rings.jpg" alt="Metropolis rings preview" width="48%">
+</p>
 
 ## Scene model
 
