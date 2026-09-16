@@ -1,6 +1,6 @@
 {
   "name": "video-sync",
-  "description": "Beat-synchronous browser visuals driven by Rekordbox, Ableton Link, and controller MIDI.",
+  "description": "Low-latency, beat-synchronous video visuals for Rekordbox with a browser renderer, scene sequencer, and Link/MIDI bridge.",
   "private": true,
   "type": "module",
   "repository": {
