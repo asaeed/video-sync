@@ -2,6 +2,9 @@
 node_modules/
 .build/
 dist/
+test-results/
+studio/test-results/
+studio/playwright-report/
 *.log
 *.jsonl
 

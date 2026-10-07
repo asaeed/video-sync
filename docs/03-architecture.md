@@ -58,14 +58,14 @@ Do not expose a network listener beyond loopback in the first release.
 
 ## Clock model
 
-Ableton Link supplies shared session tempo, beat, and phase. It does not identify tracks, decks, hot cues, or which channel is audible. The bridge captures a Link session state against a monotonic host clock, and the viewer calculates future beat boundaries locally rather than receiving a stream of approximate beat ticks.
+Ableton Link can supply shared session tempo, beat, and phase. It does not identify tracks, decks, hot cues, or which channel is audible. On the primary macOS path, `rekordbox.deck-state` v2 instead observes each visible deck's BPM and playhead, infers absolute transport with hysteresis, and publishes an observed or explicitly estimated beat position. Link stays an optional higher-confidence phase source rather than a requirement.
 
 Beat Sync and Link are related but separate:
 
 - **Beat Sync** is Rekordbox’s deck-to-deck beat-grid synchronization.
 - **Ableton Link** is a free synchronization capability built into Rekordbox and other apps. Ableton Live is not required or installed separately.
 
-Link has no permanent “master application.” Rekordbox still has a sync-master deck for Beat Sync. Each visual deck keeps its own sequence clock, anchored to the Link timebase when started. Deck identity matters for transport, cue actions, scene assignment, and visual mixing; Link does not provide any of those identities.
+Link has no permanent “master application.” Rekordbox still has a sync-master deck for Beat Sync. Each visual deck keeps its own sequence clock, anchored to its observed playhead when available. Coherent Hot Cue positions can estimate a beat-grid offset; otherwise phase is labeled as a low-confidence track-time-zero estimate. **Tap downbeat** corrects the visual phase without changing BPM. Deck identity matters for transport, cue actions, scene assignment, and visual mixing; Link does not provide any of those identities.
 
 ## Master and dominant deck semantics
 
@@ -74,11 +74,11 @@ The user’s proposed deck-1-to-deck-2 handoff should not be assumed from the cr
 - On the GRV6, Beat Sync toggles synchronization and Shift + Beat Sync sets that deck as sync master.
 - Rekordbox documents explicit master selection. Unloading/changing the master track may cause the other deck to become master, but crossfader dominance is not documented as an automatic master switch.
 - Therefore, the bridge tracks **sync master** and **audible/dominant deck** as separate state.
-- Visual phase follows Link. Hot-cue actions use the deck that emitted the controller event. Song qualification uses play/hot-cue first and dominant-deck crossing as a fallback.
+- Visual phase follows the selected observed deck clock, or Link when it is active and the deck-state path is unavailable. Hot-cue actions use the deck that emitted the controller event. Song qualification uses play/hot-cue first and dominant-deck crossing as a fallback.
 
 ## Song qualification
 
-Each deck has a monotonically increasing `loadGeneration`. A generation counts once when the first qualifying event arrives:
+Each deck has a monotonically increasing `loadGeneration`. On macOS it advances from a newly visible track identity as well as controller LOAD, with a five-second deduplication window covering the same physical load. A generation counts once when the first qualifying event arrives:
 
 1. play;
 2. a hot cue that starts/continues playback;

@@ -46,6 +46,20 @@ export function reanchorClock(clock, epochMs, changes = {}) {
   };
 }
 
+export function resyncClockAtQuantum(clock, epochMs, quantum = 4) {
+  if (!(quantum > 0)) throw new RangeError("quantum must be positive");
+  const currentBeat = beatAt(clock, epochMs);
+  const snappedBeat = Math.round(currentBeat / quantum) * quantum;
+  return {
+    clock: {
+      ...clock,
+      anchorBeat: snappedBeat,
+      anchorEpochMs: epochMs,
+    },
+    beatDelta: snappedBeat - currentBeat,
+  };
+}
+
 export function computeVisualState({
   beat,
   baseEveryBars = 4,

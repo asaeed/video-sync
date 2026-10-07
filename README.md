@@ -18,12 +18,13 @@ Video Sync is not tied to the GRV6. Controller-specific MIDI messages are transl
 
 - Independent two-deck video playback with load, play, pause, freeze, and first-frame preview states.
 - A normalized visual mix: deck levels and the crossfader determine relative opacity, totaling 100% when either deck is visible.
-- Automatic BPM, playhead, and visible Hot Cue timestamps from Rekordbox on macOS.
+- Automatic BPM, playhead, inferred absolute transport, visible track identity, and Hot Cue metadata from Rekordbox on macOS.
 - A controller-agnostic MIDI mapping layer for transport, Load, Hot Cues A-H, channel levels, crossfader, and Beat FX, with a bundled DDJ-GRV6 profile.
 - Passive Hot Cue crossings that start the assigned visual loop at the musical offset where the cue was actually crossed.
+- Observed audio-loop wraps that re-anchor the active visual loop when Rekordbox exposes loop bounds.
 - Authored two-clip loop recipes: sequence, alternating cuts, flash overlays, call-and-response, and crossfades.
 - Per-appearance source in-points, filters, and subject-aware slow pan/zoom motion.
-- A 16-bar phrase display, optional metronome, compact live controls, and a separate projector window.
+- A 16-bar phrase display, optional metronome, manual downbeat correction, compact live controls, and a separate projector window.
 - An ordered scene queue with per-entry song counts and shuffled variation on repeated scenes.
 - 36 scene contracts, including 28 locally playable film scenes when their source media has been generated.
 
@@ -31,7 +32,7 @@ Video Sync is not tied to the GRV6. Controller-specific MIDI messages are transl
 
 ```mermaid
 flowchart LR
-    R[Rekordbox] -->|BPM, playhead, cue markers| A[macOS deck-state adapter]
+    R[Rekordbox] -->|BPM, playhead, track identity, cue metadata| A[macOS deck-state adapter]
     C[MIDI controller] -->|Device profile| B[Link and MIDI bridge]
     L[Ableton Link] -. optional clock .-> B
     A --> S[Local Node relay]
@@ -68,6 +69,7 @@ Open <http://127.0.0.1:4316/>. The interface also works as a controller emulator
 
 Additional development views:
 
+- [Scene Studio authoring](http://127.0.0.1:4316/studio/)
 - [Scene schema and input map](http://127.0.0.1:4316/studio/schema/)
 - [Interface direction studies](http://127.0.0.1:4316/studio/visual-directions/)
 
@@ -94,7 +96,7 @@ The generator seeks into the configured source and creates separate silent, eigh
 
 Ableton Link is optional in the current macOS path: the deck-state adapter reads the visible Rekordbox BPM, playhead, and Hot Cue markers directly. If enabling Link changes Rekordbox Beat Sync behavior on your setup, leave Link disabled; the controller and deck-state paths still operate.
 
-Mapped controller Load presses claim the next item in the scene queue. A track loaded only with the mouse or keyboard inside Rekordbox does not currently emit a reliable song-load event, so assign or advance the scene manually in that case.
+Mapped controller Load presses claim the next item in the scene queue. On macOS, the deck-state v2 adapter also fingerprints a visible Rekordbox track title and advances the queue when that identity changes, covering mouse and keyboard loads when the current layout exposes the title through Accessibility. The two paths are deduplicated so one controller load consumes one queue entry. If a Rekordbox layout does not expose track identity, controller Load and manual selection remain the fallback.
 
 See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event capture, and custom controller maps.
 
@@ -106,7 +108,8 @@ See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event c
 ## Scene model
 
 - A **scene** is a reusable visual composition that can accompany any song.
-- A **clip** is one optimized local video file.
+- A **source** is a long local video file used for authoring.
+- A **clip** is a reusable in/out range inside a source. Published catalog scenes may still use separately optimized performance files.
 - A **visual loop** arranges one or more clip appearances on a musical timeline measured in bars, beats, and sixteenth notes.
 - A **cue binding** maps a Rekordbox Hot Cue to a visual loop.
 - A **timeline event** can select an in-point, playback rate, layer, opacity, filter, blend mode, and pan/zoom motion without modifying the source clip.
@@ -114,19 +117,19 @@ See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event c
 
 Clip 1 is the predictable default visual for normal playback. Authored Hot Cues A-G select deterministic loops; Hot Cue H uses a stable random two-clip loop generated when the deck is loaded.
 
-The current contract is documented in [docs/07-scene-schema.md](docs/07-scene-schema.md) and validated by [schema/scene.schema.json](schema/scene.schema.json).
+The editable authoring contract is documented in [Scene Studio](docs/12-scene-studio.md) and validated by [schema/scene-project.schema.json](schema/scene-project.schema.json). Publish compiles it into the runtime contract documented in [docs/07-scene-schema.md](docs/07-scene-schema.md) and validated by [schema/scene.schema.json](schema/scene.schema.json).
 
 ## Platform status
 
 | Area | Current status |
 | --- | --- |
 | Browser renderer and sequencer | Working proof of concept; Chromium is the primary tested browser |
-| macOS Rekordbox deck state | Working through the Accessibility API for visible Decks 1 and 2 |
+| macOS Rekordbox deck state | v2 contract implemented for visible Decks 1 and 2; title and loop-label extraction need live validation across Rekordbox layouts |
 | Controller MIDI | Profile-driven; the checked-in DDJ-GRV6 mapping is the currently tested reference |
 | Ableton Link observer | Working; optional for the current macOS deck-state path |
 | Windows | C++ bridge is designed to build cross-platform; Rekordbox deck-state integration is still needed |
 | Video output | 1080p target; sustained projector latency and load testing remain to be measured |
-| Authoring | Scene contracts and design studies exist; full visual authoring and agent workflow are planned |
+| Authoring | Scene Studio vertical slice: source-range cutting, reusable clips, loop timeline, cue map, local save, and runtime publish |
 
 ## Repository layout
 
@@ -137,14 +140,14 @@ The current contract is documented in [docs/07-scene-schema.md](docs/07-scene-sc
 | `schema/` | Versioned bridge-message and scene JSON Schemas |
 | `scenes/` | Exported scene contracts without bundled video media |
 | `scripts/` | Media generation, catalog validation, and scene export tools |
-| `studio/` | Scene-schema lab and interface direction studies |
+| `studio/` | React Scene Studio plus earlier schema and interface studies |
 | `docs/` | Product decisions, research, architecture, hardware tests, and sequencing design |
 
 ## Roadmap
 
 - Measure end-to-end controller, decode, render, and projector latency under performance load.
 - Add a cross-platform source of authoritative Rekordbox track loads and deck state.
-- Build the visual scene authoring mode on the same renderer used for performance.
+- Converge Scene Studio preview and Live Console on one shared renderer component.
 - Add agent-assisted clip selection, loop editing, and scene iteration outside the live runtime.
 - Package media and scene dependencies into portable performance sets.
 
@@ -161,6 +164,8 @@ The current contract is documented in [docs/07-scene-schema.md](docs/07-scene-sc
 - [Video effects](docs/08-live-video-effects.md)
 - [Source-film shortlist](docs/09-source-film-shortlist.md)
 - [Scene catalog and sequencer](docs/10-scene-catalog-and-sequencer.md)
+- [Rekordbox deck-state v2](docs/11-deck-state-v2.md)
+- [Scene Studio](docs/12-scene-studio.md)
 
 ## Licensing
 

@@ -1,5 +1,5 @@
 import { VisualEngine } from "./engine.mjs";
-import { clockFromLinkMessage, commandFromController, rekordboxTempoPlan, resolveHotCueRoute, transportEntriesForEvent } from "./bridge-controls.mjs";
+import { clockFromLinkMessage, clockFromRekordboxDeck, commandFromController, rekordboxTempoPlan, resolveHotCueRoute, transportEntriesForEvent } from "./bridge-controls.mjs";
 import { BEAT_FX_CATALOG, beatFxById, formatBeatMultiplier, stepBeatMultiplier } from "./effects.mjs";
 import { LinkMetronome } from "./metronome.mjs";
 import { computeDeckOpacities, dominantDeck } from "./mix.mjs";
@@ -8,15 +8,17 @@ import { PLAYABLE_SCENES, SCENES } from "./scene-registry.mjs";
 import { parseSavedSceneQueue, SceneQueue } from "./scene-queue.mjs";
 import { authoredClipOrder, clipOrderForAssignment, normalizeClipOrder, remapSceneClipId } from "./scene-variation.mjs";
 import { generateRandomLoop } from "./random-loop.mjs";
-import { beatAt, SongCounter, nowEpochMs, reanchorClock } from "./scheduler.mjs";
+import { beatAt, SongCounter, nowEpochMs, reanchorClock, resyncClockAtQuantum } from "./scheduler.mjs";
 import { musicalToBeats } from "./sequencer.mjs";
-import { parseDeckRuntime, serializeDeckRuntime } from "./transport-state.mjs";
-import { crossedHotCues } from "./cue-crossings.mjs";
+import { parseDeckRuntime } from "./transport-state.mjs";
+import { parsePlayerState, serializePlayerState } from "./player-state.mjs";
+import { crossedHotCues, detectedLoopWrap } from "./cue-crossings.mjs";
 
 const channel = new BroadcastChannel("video-sync-poc-v4");
 const songCounter = new SongCounter(2);
 const sceneQueueStorageKey = "video-sync-scene-queue-v1";
 const deckRuntimeStorageKey = "video-sync-deck-runtime-v1";
+const playerStateStorageKey = "video-sync-player-state-v1";
 let savedSceneQueue = null;
 try {
   savedSceneQueue = parseSavedSceneQueue(localStorage.getItem(sceneQueueStorageKey));
@@ -137,9 +139,17 @@ function makeDeck(id, sceneId) {
     randomLoop: null,
     activeLoopId: selectedScene.defaultLoopId,
     activeCueInput: null,
+    activeCueMetadata: null,
+    hotCues: [],
     cueAnchorLinkBeat: null,
     loopAnchorBeat: 0,
     loopGeneration: 0,
+    trackTitle: null,
+    trackFingerprint: null,
+    adapterSessionId: null,
+    adapterLoadGeneration: null,
+    pendingControllerLoadAt: null,
+    pendingTrackFingerprint: null,
     clock: { bpm: 100, playing: false, anchorBeat: 0, anchorEpochMs: nowEpochMs() },
   };
 }
@@ -160,8 +170,15 @@ let snapshot = {
   },
 };
 
+let restoredPlayerState = null;
 try {
-  const restored = parseDeckRuntime(sessionStorage.getItem(deckRuntimeStorageKey), SCENES.map((scene) => scene.id));
+  restoredPlayerState = parsePlayerState(localStorage.getItem(playerStateStorageKey), SCENES.map((scene) => scene.id));
+} catch {
+  // The live player still runs if browser storage is blocked.
+}
+try {
+  const restored = restoredPlayerState?.decks
+    ?? parseDeckRuntime(sessionStorage.getItem(deckRuntimeStorageKey), SCENES.map((scene) => scene.id));
   if (restored) {
     snapshot.decks = snapshot.decks.map((deck, index) => {
       const saved = restored[index];
@@ -178,7 +195,24 @@ try {
   // Runtime persistence is only a reload aid; the live controls still work without it.
 }
 
-if (snapshot.decks.some((deck) => deck.playing)) {
+if (restoredPlayerState) {
+  snapshot.linkClock = restoredPlayerState.linkClock ?? snapshot.linkClock;
+  snapshot.phraseClock = restoredPlayerState.phraseClock ?? snapshot.phraseClock;
+  snapshot.crossfader = restoredPlayerState.crossfader;
+  if (restoredPlayerState.beatFx) {
+    snapshot.effects.beatFx = { ...restoredPlayerState.beatFx, selected: beatFxById(restoredPlayerState.beatFx.selected).id };
+  }
+  snapshot.songCount = restoredPlayerState.songCount;
+  songCounter.total = snapshot.songCount;
+  songCounter.decks.forEach((counter, index) => {
+    const deck = snapshot.decks[index];
+    counter.loadGeneration = deck.generation;
+    counter.countedGeneration = deck.counted ? deck.generation : -1;
+    counter.loaded = deck.loaded;
+  });
+}
+
+if (snapshot.decks.some((deck) => deck.playing) && !restoredPlayerState?.phraseClock) {
   snapshot.phraseClock = syncPhraseClock(snapshot.phraseClock, {
     wasAnyPlaying: false,
     isAnyPlaying: true,
@@ -187,12 +221,23 @@ if (snapshot.decks.some((deck) => deck.playing)) {
   });
 }
 
-function saveDeckRuntime() {
+let pendingPlayerSave = null;
+function savePlayerStateNow() {
+  if (pendingPlayerSave !== null) clearTimeout(pendingPlayerSave);
+  pendingPlayerSave = null;
   try {
-    sessionStorage.setItem(deckRuntimeStorageKey, serializeDeckRuntime(snapshot.decks));
+    localStorage.setItem(playerStateStorageKey, serializePlayerState(snapshot, {
+      metronomeEnabled: metronome.enabled || metronomePendingResume,
+      bridgeDrawerOpen: document.querySelector("#bridge-drawer")?.classList.contains("is-open") ?? false,
+    }));
   } catch {
-    // A blocked storage API should not affect transport control.
+    // Storage failure should not affect live control.
   }
+}
+
+function saveDeckRuntime() {
+  if (pendingPlayerSave !== null) return;
+  pendingPlayerSave = setTimeout(savePlayerStateNow, 250);
 }
 
 let lastPhraseCycle = -1;
@@ -222,10 +267,14 @@ const engine = new VisualEngine(stage, (metrics) => {
 
 const metronomeButton = document.querySelector("#metronome");
 const bpmInput = document.querySelector("#bpm");
+let metronomePendingResume = Boolean(restoredPlayerState?.metronomeEnabled);
 const metronome = new LinkMetronome(() => snapshot.linkClock, (enabled) => {
+  metronomePendingResume = false;
   metronomeButton.textContent = enabled ? "Metronome on" : "Metronome off";
   metronomeButton.setAttribute("aria-pressed", String(enabled));
+  saveDeckRuntime();
 });
+if (metronomePendingResume) metronomeButton.textContent = "Resume metronome";
 
 document.querySelectorAll("[data-scene-deck]").forEach((select) => {
   SCENES.forEach((scene) => {
@@ -258,6 +307,7 @@ function broadcastSnapshot() {
   engine.applySnapshot(snapshot);
   channel.postMessage({ type: "snapshot", snapshot });
   renderState();
+  saveDeckRuntime();
 }
 
 function anyDeckPlaying() {
@@ -273,9 +323,15 @@ function updatePhraseTransport(wasAnyPlaying, epochMs = nowEpochMs()) {
   });
 }
 
-function loadDeck(deckNumber) {
+function loadDeck(deckNumber, options = {}) {
   const wasAnyPlaying = anyDeckPlaying();
   const deck = snapshot.decks[deckNumber - 1];
+  const epochMs = Number.isFinite(options.epochMs) ? options.epochMs : nowEpochMs();
+  const source = options.source ?? "manual";
+  if (source === "controller") {
+    deck.pendingControllerLoadAt = epochMs;
+    deck.pendingTrackFingerprint = deck.trackFingerprint;
+  }
   const assignment = sceneQueue.claim();
   if (assignment) {
     deck.sceneId = assignment.sceneId;
@@ -293,18 +349,25 @@ function loadDeck(deckNumber) {
   deck.counted = false;
   deck.activeLoopId = scene.defaultLoopId;
   deck.activeCueInput = null;
+  deck.activeCueMetadata = null;
+  deck.hotCues = [];
   deck.cueAnchorLinkBeat = null;
   deck.loopAnchorBeat = 0;
   deck.loopGeneration += 1;
-  deck.clock = { bpm: snapshot.linkClock.bpm, playing: false, anchorBeat: 0, anchorEpochMs: nowEpochMs() };
-  updatePhraseTransport(wasAnyPlaying);
+  deck.trackTitle = options.trackTitle ?? null;
+  deck.trackFingerprint = options.trackFingerprint ?? null;
+  deck.adapterSessionId = options.adapterSessionId ?? deck.adapterSessionId;
+  deck.adapterLoadGeneration = Number.isFinite(options.adapterLoadGeneration) ? options.adapterLoadGeneration : null;
+  deck.clock = { bpm: snapshot.linkClock.bpm, playing: false, anchorBeat: 0, anchorEpochMs: epochMs };
+  if (!options.deferPhrase) updatePhraseTransport(wasAnyPlaying, epochMs);
   saveDeckRuntime();
+  return deck;
 }
 
 function toggleDeck(deckNumber) {
   const wasAnyPlaying = anyDeckPlaying();
   const deck = snapshot.decks[deckNumber - 1];
-  if (!deck.loaded) loadDeck(deckNumber);
+  if (!deck.loaded) loadDeck(deckNumber, { deferPhrase: true });
   const now = nowEpochMs();
   deck.playing = !deck.playing;
   deck.started ||= deck.playing;
@@ -315,29 +378,30 @@ function toggleDeck(deckNumber) {
   broadcastSnapshot();
 }
 
-function setDeckPlaying(deckNumber, playing) {
+function setDeckPlaying(deckNumber, playing, options = {}) {
   const wasAnyPlaying = anyDeckPlaying();
   const deck = snapshot.decks[deckNumber - 1];
   const wasLoaded = deck.loaded;
-  if (!wasLoaded) loadDeck(deckNumber);
+  if (!wasLoaded) loadDeck(deckNumber, { deferPhrase: true, epochMs: options.epochMs });
   const nextPlaying = Boolean(playing);
   if (deck.playing === nextPlaying) {
-    if (!wasLoaded) broadcastSnapshot();
+    if (!wasLoaded && !options.deferBroadcast) broadcastSnapshot();
     return;
   }
+  const epochMs = Number.isFinite(options.epochMs) ? options.epochMs : nowEpochMs();
   deck.playing = nextPlaying;
   deck.started ||= nextPlaying;
-  deck.clock = reanchorClock(deck.clock, nowEpochMs(), { playing: nextPlaying });
+  deck.clock = reanchorClock(deck.clock, epochMs, { playing: nextPlaying });
   if (nextPlaying) qualifySong(deckNumber, "play");
-  updatePhraseTransport(wasAnyPlaying);
+  if (!options.deferPhrase) updatePhraseTransport(wasAnyPlaying, epochMs);
   saveDeckRuntime();
-  broadcastSnapshot();
+  if (!options.deferBroadcast) broadcastSnapshot();
 }
 
 function ensureDeckPlaying(deckNumber, reason) {
   const wasAnyPlaying = anyDeckPlaying();
   const deck = snapshot.decks[deckNumber - 1];
-  if (!deck.loaded) loadDeck(deckNumber);
+  if (!deck.loaded) loadDeck(deckNumber, { deferPhrase: true });
   if (!deck.playing) {
     deck.playing = true;
     deck.started = true;
@@ -356,10 +420,29 @@ function qualifySong(deckNumber, reason) {
 
 const automaticCueObservations = new Map();
 const manualCueSuppressionUntil = new Map();
+const cueMetadataBasisByDeck = new Map();
+
+function reportCueMetadataAvailability(deckState, epochMs) {
+  const deckNumber = Number(deckState.deck);
+  if (!Number.isInteger(deckNumber) || !deckState.loaded) {
+    cueMetadataBasisByDeck.delete(deckNumber);
+    return;
+  }
+  const basis = deckState.hotCueMetadataBasis;
+  if (!basis || cueMetadataBasisByDeck.get(deckNumber) === basis) return;
+  cueMetadataBasisByDeck.set(deckNumber, basis);
+  if (basis === "unavailable") {
+    appendBridgeEvent(`cue data · D${deckNumber} · unavailable · show PAD / Hot Cue in Rekordbox`, "error", epochMs);
+  } else if (basis === "cached") {
+    appendBridgeEvent(`cue data · D${deckNumber} · PAD hidden · using cached timeline`, "system", epochMs);
+  } else {
+    appendBridgeEvent(`cue data · D${deckNumber} · live`, "system", epochMs);
+  }
+}
 
 function triggerCue(deckNumber, cueIndex, options = {}) {
   const deck = snapshot.decks[deckNumber - 1];
-  if (!deck.loaded) loadDeck(deckNumber);
+  if (!deck.loaded) loadDeck(deckNumber, { deferPhrase: true });
   const route = resolveHotCueRoute(sceneById(deck.sceneId), cueIndex, deck.randomLoop);
   ensureDeckPlaying(deckNumber, route.input);
   const epochMs = nowEpochMs();
@@ -370,17 +453,26 @@ function triggerCue(deckNumber, cueIndex, options = {}) {
   if (!options.automatic) manualCueSuppressionUntil.set(deckNumber, epochMs + 1500);
   deck.activeLoopId = route.loopId;
   deck.activeCueInput = route.activeCueInput;
+  const observedCue = options.cue ?? deck.hotCues.find((cue) => cue.cueIndex === cueIndex) ?? null;
+  const authoredLengthBeats = route.binding?.cue?.type === "loop" ? musicalToBeats(route.binding.cue.length) : null;
+  deck.activeCueMetadata = observedCue ? { ...observedCue } : {
+    cueIndex,
+    kind: route.binding?.cue?.type === "loop" ? "loop" : "cue",
+    ...(authoredLengthBeats ? { lengthBeats: authoredLengthBeats } : {}),
+    metadataBasis: "scene-contract-fallback",
+  };
   deck.cueAnchorLinkBeat = route.binding ? beatAt(snapshot.linkClock, anchorEpochMs) : null;
   deck.loopAnchorBeat = beatAt(deck.clock, anchorEpochMs);
   deck.loopGeneration += 1;
   saveDeckRuntime();
-  broadcastSnapshot();
+  if (!options.deferBroadcast) broadcastSnapshot();
 }
 
 function applyAutomaticCueCrossings(message) {
   const epochMs = message.emittedAtUnixMs ?? nowEpochMs();
   for (const deckState of message.payload?.decks ?? []) {
     const deckNumber = Number(deckState.deck);
+    reportCueMetadataAvailability(deckState, epochMs);
     const positionSeconds = typeof deckState.positionSeconds === "number" ? deckState.positionSeconds : NaN;
     if (!Number.isInteger(deckNumber) || !Number.isFinite(positionSeconds)) continue;
     const current = {
@@ -395,6 +487,26 @@ function applyAutomaticCueCrossings(message) {
     const deck = snapshot.decks[deckNumber - 1];
     const scene = deck ? sceneById(deck.sceneId) : null;
     if (!deck || !scene) continue;
+    deck.hotCues = current.hotCues;
+    if (deck.activeCueInput) {
+      const activeCueIndex = deck.activeCueInput.charCodeAt(deck.activeCueInput.length - 1) - 65;
+      const currentActiveCue = current.hotCues.find((cue) => cue.cueIndex === activeCueIndex) ?? deck.activeCueMetadata;
+      const wrap = detectedLoopWrap(previous, current, {
+        playing: deck.playing,
+        activeCue: currentActiveCue,
+        bpm: deckState.bpm,
+      });
+      if (wrap) {
+        deck.activeCueMetadata = currentActiveCue;
+        deck.loopAnchorBeat = beatAt(deck.clock, wrap.wrappedAtEpochMs);
+        deck.loopGeneration += 1;
+        appendBridgeEvent(
+          `loop wrap · D${deckNumber} · ${String.fromCharCode(65 + activeCueIndex)} · ${(wrap.observedAtEpochMs - wrap.wrappedAtEpochMs).toFixed(0)} ms compensated`,
+          "control",
+          epochMs,
+        );
+      }
+    }
     // Let the normal cue router handle every visible Rekordbox cue. In
     // particular, H intentionally has no fixed scene binding and resolves to
     // the deck's generated random loop. Filtering to authored bindings here
@@ -405,6 +517,8 @@ function applyAutomaticCueCrossings(message) {
     triggerCue(deckNumber, crossing.cueIndex, {
       automatic: true,
       anchorEpochMs: crossing.crossedAtEpochMs,
+      cue: crossing,
+      deferBroadcast: true,
     });
     appendBridgeEvent(
       `auto cue · D${deckNumber} · ${String.fromCharCode(65 + crossing.cueIndex)} · ${(crossing.observedAtEpochMs - crossing.crossedAtEpochMs).toFixed(0)} ms compensated`,
@@ -412,6 +526,91 @@ function applyAutomaticCueCrossings(message) {
       epochMs,
     );
   }
+}
+
+const controllerLoadDeduplicationMs = 5000;
+
+function reconcileObservedTrackLoad(deckState, adapterSessionId, epochMs) {
+  const deckNumber = Number(deckState.deck);
+  const deck = snapshot.decks[deckNumber - 1];
+  if (!deck) return;
+  const fingerprint = typeof deckState.trackFingerprint === "string" ? deckState.trackFingerprint : null;
+  const title = typeof deckState.trackTitle === "string" ? deckState.trackTitle : null;
+  const adapterGeneration = Number(deckState.loadGeneration);
+  const sameAdapterSession = Boolean(adapterSessionId && deck.adapterSessionId === adapterSessionId);
+  const generationChanged = sameAdapterSession && Number.isFinite(adapterGeneration) &&
+    Number.isFinite(deck.adapterLoadGeneration) && adapterGeneration !== deck.adapterLoadGeneration;
+  const fingerprintChanged = Boolean(fingerprint && deck.trackFingerprint && fingerprint !== deck.trackFingerprint);
+  const newlyObservedLoad = Boolean(deckState.loaded && !deck.loaded);
+  const recentControllerLoad = Number.isFinite(deck.pendingControllerLoadAt) &&
+    epochMs - deck.pendingControllerLoadAt <= controllerLoadDeduplicationMs;
+  const shouldClaimScene = deckState.loaded && (newlyObservedLoad || fingerprintChanged || generationChanged);
+
+  if (shouldClaimScene && !recentControllerLoad) {
+    loadDeck(deckNumber, {
+      source: "rekordbox",
+      epochMs,
+      deferPhrase: true,
+      trackFingerprint: fingerprint,
+      trackTitle: title,
+      adapterSessionId,
+      adapterLoadGeneration: Number.isFinite(adapterGeneration) ? adapterGeneration : null,
+    });
+  } else if (deckState.loaded) {
+    deck.loaded = true;
+    deck.trackFingerprint = fingerprint ?? deck.trackFingerprint;
+    deck.trackTitle = title ?? deck.trackTitle;
+  } else {
+    deck.loaded = false;
+    deck.playing = false;
+    deck.started = false;
+  }
+
+  if (recentControllerLoad && (generationChanged || (fingerprint && fingerprint !== deck.pendingTrackFingerprint))) {
+    deck.pendingControllerLoadAt = null;
+    deck.pendingTrackFingerprint = null;
+  }
+  deck.adapterSessionId = adapterSessionId ?? deck.adapterSessionId;
+  deck.adapterLoadGeneration = Number.isFinite(adapterGeneration) ? adapterGeneration : deck.adapterLoadGeneration;
+  deck.hotCues = Array.isArray(deckState.hotCues) ? deckState.hotCues : [];
+}
+
+function applyRekordboxDeckState(message, plan) {
+  const epochMs = message.emittedAtUnixMs ?? nowEpochMs();
+  const adapterSessionId = message.payload?.adapterSessionId ?? null;
+  const wasAnyPlaying = anyDeckPlaying();
+
+  for (const observation of message.payload?.decks ?? []) {
+    reconcileObservedTrackLoad(observation, adapterSessionId, epochMs);
+  }
+  for (const update of plan.decks) {
+    const deck = snapshot.decks[update.deck - 1];
+    if (!deck || !update.loaded) continue;
+    const wasPlaying = deck.playing;
+    if (update.transportKnown) {
+      deck.playing = Boolean(update.playing);
+      deck.started ||= deck.playing;
+      if (!wasPlaying && deck.playing) qualifySong(update.deck, "observed-playhead");
+    }
+    deck.clock = clockFromRekordboxDeck(update, deck.clock, epochMs);
+  }
+
+  const sourceDeckState = plan.decks.find((deck) => deck.deck === plan.sourceDeck);
+  if (sourceDeckState) snapshot.linkClock = clockFromRekordboxDeck(sourceDeckState, snapshot.linkClock, epochMs);
+  const isAnyPlaying = anyDeckPlaying();
+  const firstObservedStart = !wasAnyPlaying && isAnyPlaying
+    ? Math.min(epochMs, ...plan.decks
+      .filter((deck) => deck.transportKnown && deck.playing && Number.isFinite(deck.transportChangedAtUnixMs))
+      .map((deck) => deck.transportChangedAtUnixMs))
+    : epochMs;
+  snapshot.phraseClock = syncPhraseClock(snapshot.phraseClock, {
+    wasAnyPlaying,
+    isAnyPlaying,
+    epochMs: Number.isFinite(firstObservedStart) ? firstObservedStart : epochMs,
+    bpm: plan.bpm,
+  });
+  applyAutomaticCueCrossings(message);
+  saveDeckRuntime();
 }
 
 function setBpm(bpm) {
@@ -438,7 +637,15 @@ function cueLetter(input) {
   return input.replace("hotCue", "");
 }
 
-function cueKind(binding) {
+function cueKind(binding, deck = null) {
+  const cueIndex = binding.input.charCodeAt(binding.input.length - 1) - 65;
+  const observed = deck?.hotCues?.find((cue) => cue.cueIndex === cueIndex);
+  if (observed?.kind === "loop") {
+    if (Number.isFinite(observed.lengthBeats)) return `${observed.lengthBeats}-beat audio loop`;
+    if (Number.isFinite(observed.endTimeSeconds)) return `${(observed.endTimeSeconds - observed.timeSeconds).toFixed(1)}s audio loop`;
+    return "audio loop";
+  }
+  if (observed?.kind === "cue") return "jump cue";
   if (binding.cue.type === "loop") return `${bars(binding.cue.length)}-bar audio loop`;
   return binding.cue.type === "random" ? "random fallback" : "jump cue";
 }
@@ -543,7 +750,7 @@ function renderCueDetail(deck, deckNumber, scene, binding, visualLoop) {
   const title = document.createElement("strong");
   title.textContent = `Hot Cue ${cueLetter(binding.input)}`;
   const summary = document.createElement("span");
-  summary.textContent = `${cueKind(binding)} · ${bars(visualLoop.length)}-bar visual loop`;
+  summary.textContent = `${cueKind(binding, deck)} · ${bars(visualLoop.length)}-bar visual loop`;
   head.append(title, summary);
   detail.append(head);
 
@@ -806,7 +1013,7 @@ function renderState() {
         return;
       }
       const visualLoop = visualLoopForDeck(scene, deck, binding.visual.loopId);
-      button.setAttribute("aria-label", `Hot Cue ${cueLetter(binding.input)}: ${cueKind(binding)}, ${bars(visualLoop.length)}-bar visual loop`);
+      button.setAttribute("aria-label", `Hot Cue ${cueLetter(binding.input)}: ${cueKind(binding, deck)}, ${bars(visualLoop.length)}-bar visual loop`);
       button.classList.toggle("is-active", binding.input === deck.activeCueInput);
       button.setAttribute("aria-pressed", String(binding.input === deck.activeCueInput));
     });
@@ -844,10 +1051,24 @@ bpmInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") event.currentTarget.blur();
 });
 metronomeButton.addEventListener("click", () => {
+  metronomePendingResume = false;
   metronome.toggle().catch(() => {
     metronomeButton.textContent = "Metronome unavailable";
     metronomeButton.setAttribute("aria-pressed", "false");
   });
+});
+document.querySelector("#resync-phase").addEventListener("click", () => {
+  const epochMs = nowEpochMs();
+  snapshot.linkClock = resyncClockAtQuantum(snapshot.linkClock, epochMs, 4).clock;
+  for (const deck of snapshot.decks) {
+    if (!deck.playing) continue;
+    const result = resyncClockAtQuantum(deck.clock, epochMs, 4);
+    deck.clock = result.clock;
+    deck.loopAnchorBeat += result.beatDelta;
+  }
+  saveDeckRuntime();
+  appendBridgeEvent("manual phase · bar downbeat", "control", epochMs);
+  broadcastSnapshot();
 });
 document.querySelector("#crossfader").addEventListener("input", (event) => {
   snapshot.crossfader = Number(event.target.value) / 100;
@@ -958,9 +1179,12 @@ function setBridgeDrawerOpen(open) {
   bridgeDrawerToggle.setAttribute("aria-expanded", String(open));
   document.body.classList.toggle("is-bridge-drawer-open", open);
   updateBridgeToggleLabel(open);
+  saveDeckRuntime();
   if (open) requestAnimationFrame(() => bridgeDrawerClose.focus());
   else bridgeDrawerToggle.focus();
 }
+
+if (restoredPlayerState?.bridgeDrawerOpen) setBridgeDrawerOpen(true);
 
 bridgeDrawerToggle.addEventListener("click", () => setBridgeDrawerOpen(!bridgeDrawer.classList.contains("is-open")));
 bridgeDrawerClose.addEventListener("click", () => setBridgeDrawerOpen(false));
@@ -1026,7 +1250,7 @@ function applyControllerMessage(payload) {
   const command = commandFromController(payload);
   if (!command) return;
   if (command.type === "load-deck" && command.deck <= snapshot.decks.length) {
-    loadDeck(command.deck);
+    loadDeck(command.deck, { source: "controller" });
     broadcastSnapshot();
   } else if (command.type === "toggle-deck" && command.deck <= snapshot.decks.length) {
     if (controllerTransportRelayAvailable) return;
@@ -1098,28 +1322,32 @@ bridgeSource.addEventListener("bridge-message", ({ data }) => {
     rekordboxTempoAvailable = Boolean(plan);
     const target = document.querySelector("#bridge-rekordbox");
     if (!plan) {
+      const epochMs = message.emittedAtUnixMs ?? nowEpochMs();
+      const wasAnyPlaying = anyDeckPlaying();
+      for (const update of message.payload?.decks ?? []) {
+        reconcileObservedTrackLoad(update, message.payload?.adapterSessionId, epochMs);
+      }
+      snapshot.phraseClock = syncPhraseClock(snapshot.phraseClock, {
+        wasAnyPlaying,
+        isAnyPlaying: anyDeckPlaying(),
+        epochMs,
+        bpm: snapshot.linkClock.bpm,
+      });
+      saveDeckRuntime();
       target.textContent = "No loaded deck";
+      broadcastSnapshot();
       return;
     }
 
     const epochMs = message.emittedAtUnixMs ?? nowEpochMs();
-    for (const update of plan.decks) {
-      const deck = snapshot.decks[update.deck - 1];
-      if (deck) deck.clock = reanchorClock(deck.clock, epochMs, { bpm: update.bpm });
-    }
-    snapshot.linkClock = reanchorClock(snapshot.linkClock, epochMs, { bpm: plan.bpm });
-    const anyPlaying = anyDeckPlaying();
-    snapshot.phraseClock = syncPhraseClock(snapshot.phraseClock, {
-      wasAnyPlaying: anyPlaying,
-      isAnyPlaying: anyPlaying,
-      epochMs,
-      bpm: plan.bpm,
-    });
-    applyAutomaticCueCrossings(message);
+    applyRekordboxDeckState(message, plan);
     target.textContent = `D${plan.sourceDeck} · ${plan.bpm.toFixed(2)} BPM`;
-    const signature = `${plan.sourceDeck}|${plan.bpm.toFixed(2)}|${plan.decks.map((entry) => `${entry.deck}:${entry.bpm.toFixed(2)}`).join(",")}`;
+    const signature = `${plan.sourceDeck}|${plan.bpm.toFixed(2)}|${plan.decks.map((entry) => `${entry.deck}:${entry.bpm.toFixed(2)}:${entry.transportKnown ? (entry.playing ? "play" : "pause") : "unknown"}:${entry.trackFingerprint ?? "no-track-key"}`).join(",")}`;
     if (signature !== lastRekordboxFeedSignature) {
-      appendBridgeEvent(`Rekordbox · D${plan.sourceDeck} · ${plan.bpm.toFixed(2)} BPM`, "link", epochMs);
+      const source = plan.decks.find((entry) => entry.deck === plan.sourceDeck);
+      const transport = source?.transportKnown ? (source.playing ? "playing" : "paused") : "transport pending";
+      const phase = source?.phaseConfidence && source.phaseConfidence !== "none" ? ` · phase ${source.phaseConfidence}` : "";
+      appendBridgeEvent(`Rekordbox · D${plan.sourceDeck} · ${plan.bpm.toFixed(2)} BPM · ${transport}${phase}`, "link", epochMs);
       lastRekordboxFeedSignature = signature;
     }
     broadcastSnapshot();
@@ -1175,7 +1403,7 @@ bridgeSource.addEventListener("error", () => {
 });
 
 window.addEventListener("pagehide", () => {
-  saveDeckRuntime();
+  savePlayerStateNow();
   metronome.stop();
   bridgeSource.close();
 });

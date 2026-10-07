@@ -51,9 +51,11 @@ The browser's **Live bridge** panel makes this capture visible while the emulato
 
 The browser receives replaceable Link clock snapshots at 10 Hz. To avoid an unbounded high-rate disk log, JSONL persistence keeps every controller event but samples a stable Link clock every five seconds, with immediate records when tempo, peer count, or shared start/stop intent changes.
 
-The GRV6 Play/Pause control is a momentary press edge, not an absolute transport value. The development relay therefore tracks the press parity for each deck, treats a normal LOAD edge as a known stopped state, treats a Hot Cue edge as a known playing state, and stores that state in `.build/bridge-transport-state.json`. A browser receives a full absolute `controller-transport` snapshot when it connects, then live events identify and update only the deck that changed so one deck's transport cannot overwrite the other deck. The browser also retains its current deck runtime in session storage. Reloading the page while a deck is playing now restores that playing state, so the next controller press pauses the visual instead of starting it. A first-ever bridge launch while Rekordbox is already mid-song and no LOAD, Play, or Hot Cue edge has been observed remains unknowable from controller MIDI alone; an absolute Rekordbox MIDI-output mapping is the future authoritative solution.
+The GRV6 Play/Pause control is a momentary press edge, not an absolute transport value. The relay uses it as a low-latency hint, while the macOS adapter confirms absolute play/pause from visible Rekordbox playhead motion and stability. A short hint grace period prevents a stale moving playhead sample from undoing a physical Stop press. Confirmed state reconciles the persisted `.build/bridge-transport-state.json` snapshot, and updates remain scoped to the deck that actually changed.
 
-Direct GRV6 input gives us the physical Hot Cue press edge, which is sufficient to start or re-anchor its mapped visual loop. It does not report a later automatic audio-loop wrap; the visual engine predicts that boundary from Link plus the configured cue length unless a stable reset event is discovered.
+Direct controller input still supplies the fastest Hot Cue press edge. The deck-state v2 path adds visible cue timestamps plus conservative `cue`, `loop`, or `unknown` classification. When Rekordbox Accessibility exposes a loop end or beat length, a detected playhead wrap re-anchors the active visual loop at the interpolated wrap time. Otherwise, the authored cue contract remains the explicit fallback.
+
+Visible track titles are normalized into non-reversible session fingerprints and a per-deck `loadGeneration`. A title change can therefore claim the next scene even when a track was loaded with the mouse or keyboard. The browser deduplicates the title transition against a recent controller LOAD edge.
 
 Example mapping file format:
 
@@ -82,7 +84,7 @@ Every matching message produces both `midi.raw` evidence and a `controller.contr
 
 The bridge enables Link and captures app-session state for `tempo`, `beat`, `phase`, shared `playing` intent, and peer count. It never commits session state and never calls Link tempo, beat, or start/stop mutation APIs. Link supplies no deck number, track, hot cue, fader, Rekordbox sync-master identity, or deck playhead.
 
-Because Link has no per-deck playhead, a configured A/B visual loop repeats from the physical Hot Cue press anchor and modeled audio-loop length. Exact correction at a later Rekordbox audio-loop wrap remains possible only if the live capture reveals a usable reset/state message.
+When Link is absent, the v2 deck state derives a per-deck beat position from BPM and playhead. Coherent visible cue positions can estimate the beat-grid offset; otherwise the contract labels phase as a low-confidence track-time-zero estimate. The compact **Tap downbeat** control is the manual correction path. Link remains the higher-confidence shared phase source when it fits the Rekordbox workflow.
 
 ## Output contract
 
@@ -91,6 +93,7 @@ Each line validates against [`schema/bridge-message.schema.json`](../schema/brid
 - `bridge.ready`, `bridge.self-test`, `bridge.stopped`;
 - `link.clock`;
 - `midi.ports`, `midi.raw`;
-- `controller.control` (`rekordbox.control` remains schema-compatible for older recordings).
+- `controller.control` (`rekordbox.control` remains schema-compatible for older recordings);
+- `rekordbox.adapter-status`, `rekordbox.deck-state`.
 
-The browser POC consumes GRV6 controls for deck transport, LOAD 1/2, Hot Cues A-H, channel levels, crossfader position, and Beat FX. The LOAD mappings follow AlphaTheta's published message list: channel 7 notes 70 and 71. Each active LOAD edge claims the next scene-queue song assignment globally across the two decks. A track loaded by mouse or keyboard entirely inside Rekordbox emits no controller edge and is not inferred. JSON Lines remain the evidence and replay format; unsupported software state is never synthesized as controller truth.
+`rekordbox.deck-state` payloads use `contractVersion: 2` and carry explicit confidence/basis fields for transport, identity, cues, and phase. Missing Accessibility data stays `null`, `unknown`, or `unavailable`; the relay does not promote a heuristic into authoritative truth. Because Rekordbox only exposes cue timestamps while a deck's PAD / Hot Cue grid is visible, the normalized state marks that visibility explicitly and can retain the last visible cue timeline for the same track. The browser still consumes profile-driven controller transport, LOAD, Hot Cues A-H, channel levels, crossfader position, and Beat FX.

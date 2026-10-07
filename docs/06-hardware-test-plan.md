@@ -11,7 +11,7 @@ AlphaTheta publishes the remaining GRV6 assignments. We still need complete labe
 - DDJ-GRV6 connected directly to the computer where possible.
 - Rekordbox 7.2.2 in the normal performance configuration.
 - Two local analyzed tracks with clear beat grids and several hot cues.
-- Ableton Link enabled globally and on the participating decks.
+- Ableton Link disabled for the primary baseline; repeat a separate optional-Link pass afterward.
 - Video Sync bridge opened against the `DDJ-GRV6` input with `bridge/config/ddj-grv6.csv`.
 - Extended-desktop projector at 1920x1080/60 Hz.
 - No additional DJ/VJ applications running during the baseline.
@@ -24,8 +24,8 @@ For each action, record the direct GRV6 bytes, timestamp, deck identity, repetit
 | --- | --- | --- | --- |
 | Play/pause | 1, 2 | Yes | dominance crossing |
 | Hot cues A–H | 1, 2 | A–C initially | manual Live control for any unmapped cue |
-| Audio-loop wrap/reset | 1, 2 | Preferred for exact visual re-anchor | configured loop-length prediction |
-| Load track | 1, 2 | Preferred | infer new generation from first action plus later metadata path |
+| Audio-loop wrap/reset | 1, 2 | Preferred for exact visual re-anchor | authored cue length when Accessibility exposes no loop bounds |
+| Load track | 1, 2 | Yes | controller LOAD when visible track identity is unavailable |
 | Beat Sync | 1, 2 | Diagnostic | Link health only |
 | Set master | 1, 2 | Diagnostic | do not infer; show unknown |
 | Channel faders | all used | Preferred | crossfader only |
@@ -33,6 +33,12 @@ For each action, record the direct GRV6 bytes, timestamp, deck identity, repetit
 | Beat FX on/off/parameters | used controls | Deferred | no mirrored effect |
 
 Run each mapped action at least 30 times, then restart the bridge and Rekordbox once and repeat. A message is accepted into the software profile only if it is stable, unambiguous, and passive. Repeat the same evidence standard after unplug/replug.
+
+For each load, capture `trackTitle`, `trackFingerprint`, `trackIdentityBasis`, and `loadGeneration`. Test controller LOAD, mouse drag, keyboard load, loading the same track again, and switching between two tracks with the same BPM. Confirm that every real load consumes exactly one scene and that UI-only changes consume none.
+
+For transport, start the bridge once while each deck is already playing and once while each deck is paused. Confirm `playhead-motion` and `playhead-stable` independently of controller parity, then press Stop during a moving sample and confirm the controller hint is not immediately reversed.
+
+For every visible Hot Cue A-H, record `kind`, `endTimeSeconds`, `lengthBeats`, and `metadataBasis`. Treat `unknown` as a valid conservative result. For every cue classified as `loop`, observe at least ten wraps and compare the interpolated visual re-anchor against the Rekordbox playhead.
 
 For channel and crossfader controls, verify position messages rather than assuming audio metering. The published GRV6 `CH LEVEL METER` entries are computer-to-controller MIDI output and do not provide Video Sync with measured channel loudness.
 

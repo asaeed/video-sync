@@ -10,7 +10,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "sourceTimeUs": { "type": "integer", "minimum": 0 },
     "emittedAtUnixMs": { "type": "integer", "minimum": 0 },
-    "source": { "enum": ["bridge", "ableton-link", "midi", "controller-midi", "rekordbox-midi"] },
+    "source": { "enum": ["bridge", "ableton-link", "midi", "controller-midi", "rekordbox-midi", "rekordbox-accessibility"] },
     "type": {
       "enum": [
         "bridge.ready",
@@ -20,7 +20,10 @@
         "midi.ports",
         "midi.raw",
         "controller.control",
-        "rekordbox.control"
+        "rekordbox.control",
+        "rekordbox.deck-state",
+        "rekordbox.adapter-status",
+        "rekordbox.adapter-debug"
       ]
     },
     "payload": { "type": "object" }
@@ -37,6 +40,18 @@
     {
       "if": { "properties": { "type": { "enum": ["controller.control", "rekordbox.control"] } }, "required": ["type"] },
       "then": { "properties": { "source": { "enum": ["controller-midi", "rekordbox-midi"] }, "payload": { "$ref": "#/$defs/controllerControl" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "rekordbox.deck-state" } }, "required": ["type"] },
+      "then": { "properties": { "source": { "const": "rekordbox-accessibility" }, "payload": { "$ref": "#/$defs/rekordboxDeckState" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "rekordbox.adapter-status" } }, "required": ["type"] },
+      "then": { "properties": { "source": { "const": "rekordbox-accessibility" }, "payload": { "$ref": "#/$defs/adapterStatus" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "rekordbox.adapter-debug" } }, "required": ["type"] },
+      "then": { "properties": { "source": { "const": "rekordbox-accessibility" }, "payload": { "$ref": "#/$defs/adapterDebug" } } }
     }
   ],
   "$defs": {
@@ -78,6 +93,94 @@
         "rawValue": { "type": "integer", "minimum": 0, "maximum": 16383 },
         "resolutionBits": { "enum": [7, 14] },
         "active": { "type": "boolean" }
+      }
+    },
+    "adapterStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "detail"],
+      "properties": {
+        "state": { "enum": ["permission-required", "waiting", "running"] },
+        "detail": { "type": "string" }
+      }
+    },
+    "adapterDebug": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elements"],
+      "properties": {
+        "elements": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "rekordboxDeckState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "adapterSessionId", "capabilities", "decks"],
+      "properties": {
+        "contractVersion": { "const": 2 },
+        "adapterSessionId": { "type": "string", "minLength": 1 },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["absoluteTransport", "trackIdentity", "hotCueMetadata", "beatPhase"],
+          "properties": {
+            "absoluteTransport": { "type": "boolean" },
+            "trackIdentity": { "type": "boolean" },
+            "hotCueMetadata": { "type": "boolean" },
+            "beatPhase": { "const": "observed-or-estimated" }
+          }
+        },
+        "decks": { "type": "array", "items": { "$ref": "#/$defs/rekordboxDeck" } }
+      }
+    },
+    "rekordboxDeck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deck", "loaded", "bpm", "positionSeconds", "trackTitle", "trackArtist",
+        "trackFingerprint", "trackIdentityBasis", "loadGeneration", "loadChanged", "identityAttached",
+        "transportKnown", "playing", "transportBasis", "transportChangedAtUnixMs", "hotCues",
+        "hotCueMetadataVisible", "hotCueMetadataBasis",
+        "beatPosition", "beatPhase", "beatGridOffsetBeats", "phaseBasis", "phaseConfidence"
+      ],
+      "properties": {
+        "deck": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "loaded": { "type": "boolean" },
+        "bpm": { "type": ["number", "null"], "minimum": 0 },
+        "positionSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "trackTitle": { "type": ["string", "null"] },
+        "trackArtist": { "type": ["string", "null"] },
+        "trackFingerprint": { "type": ["string", "null"] },
+        "trackIdentityBasis": { "enum": ["accessibility-label", "deck-header-heuristic", "visible-title", "unavailable"] },
+        "loadGeneration": { "type": "integer", "minimum": 0 },
+        "loadChanged": { "type": "boolean" },
+        "identityAttached": { "type": "boolean" },
+        "transportKnown": { "type": "boolean" },
+        "playing": { "type": "boolean" },
+        "transportBasis": { "enum": ["unobserved", "new-load", "deck-unloaded", "controller-hint", "playhead-motion", "playhead-stable", "playhead-discontinuity"] },
+        "transportChangedAtUnixMs": { "type": ["number", "null"], "minimum": 0 },
+        "hotCues": { "type": "array", "items": { "$ref": "#/$defs/rekordboxHotCue" } },
+        "hotCueMetadataVisible": { "type": "boolean" },
+        "hotCueMetadataBasis": { "enum": ["visible", "cached", "unavailable"] },
+        "beatPosition": { "type": ["number", "null"] },
+        "beatPhase": { "type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 1 },
+        "beatGridOffsetBeats": { "type": ["number", "null"] },
+        "phaseBasis": { "enum": ["accessibility-beat-counter", "hot-cue-grid-estimate", "track-time-zero-estimate", "unavailable"] },
+        "phaseConfidence": { "enum": ["high", "medium", "low", "none"] }
+      }
+    },
+    "rekordboxHotCue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cueIndex", "timeSeconds", "kind", "metadataBasis"],
+      "properties": {
+        "cueIndex": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "timeSeconds": { "type": "number", "minimum": 0 },
+        "kind": { "enum": ["cue", "loop", "unknown"] },
+        "endTimeSeconds": { "type": "number", "minimum": 0 },
+        "lengthBeats": { "type": "number", "exclusiveMinimum": 0 },
+        "active": { "type": "boolean" },
+        "metadataBasis": { "type": "string", "minLength": 1 }
       }
     }
   }

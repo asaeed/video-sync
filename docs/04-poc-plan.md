@@ -52,7 +52,7 @@ The original clip buttons were an acknowledged design failure: they exposed brie
 
 ## POC 1: Link/MIDI bridge recorder — foundation implemented
 
-The native C++ spike now includes:
+The native C++ and macOS adapter spike now includes:
 
 - official Ableton Link client;
 - RtMidi port discovery by index or name, a macOS virtual self-test input, direct GRV6 input, and a timestamped raw event monitor;
@@ -62,20 +62,22 @@ The native C++ spike now includes:
 - Link peer/clock snapshots and monotonic source timestamps.
 - supervision by the development server plus an SSE/JSON diagnostics surface consumed by the emulator.
 - display-frame coalescing for high-rate 14-bit faders and sampled continuous rows in the visible feed, while the evidence recording remains lossless for controller events.
+- a deck-state v2 normalization layer with playhead-derived absolute transport, visible track fingerprints/load generations, cue metadata, loop-wrap correction, and phase confidence.
 
 The local build produced Link clock snapshots and passed its CoreMIDI self-test. On 2026-09-04 it also opened `DDJ-GRV6` while Rekordbox 7.2.2 played and captured Play/Pause, Beat Sync, LOAD 1/2, and 14-bit tempo-fader messages matching AlphaTheta's published table. Direct MIDI is therefore the primary live-control path; the Rekordbox virtual-input experiment received no data. LOAD 1/2, Hot Cue A-H, channel-level, crossfader, and Beat FX rows are now in the device profile and drive the browser POC. The verified LOAD rows use channel-7 notes 70 and 71; the combined system still needs a performance soak test.
 
-Exit criteria:
+Remaining exit criteria:
 
-- joins the Rekordbox Link session without altering tempo unexpectedly;
-- remains phase-aligned through tempo changes and start/stop;
+- visible title and loop metadata remain stable across supported Rekordbox layouts;
+- inferred transport starts correctly mid-song and does not bounce after Stop;
+- phase remains aligned through tempo changes, start/stop, seeks, and manual downbeat correction;
 - receives only published and capture-confirmed GRV6 MIDI messages;
 - does not change Rekordbox/controller behavior;
-- unplug/replug and Link loss recover safely.
+- unplug/replug, adapter restart, and optional-Link loss recover safely.
 
-## POC 2: native viewer-core
+## POC 2: browser viewer qualification, native fallback
 
-Build SDL3 + FFmpeg output against the simulated/recorded bridge before adding Studio.
+Qualify the existing browser compositor against the simulated/recorded bridge and actual projector before adding Studio. Build the earlier SDL3 + FFmpeg viewer-core only if measured browser performance misses the target.
 
 Behavior:
 
@@ -115,7 +117,7 @@ First authoring path:
 2. Run the browser POC together to tune scene behavior.
 3. Complete labeled Link/direct-GRV6 captures with Rekordbox 7.2.2 on decks 1 and 2.
 4. Freeze only the bridge fields actually observed in that test; probe the GRV6 directly only for missing essentials.
-5. Build and benchmark viewer-core on the actual projector using the v4 loop contract.
+5. Benchmark the browser viewer on the actual projector using the v4 loop contract; keep the native viewer as a measured fallback.
 6. Build compact Live mode, then expand it into Author mode.
 
 This sequencing separates clock, controller, renderer, and editor risk so a failure in one is diagnosable.

@@ -125,7 +125,7 @@ function expandedVisualLoops(scene) {
   return loops;
 }
 
-function buildScene(definition) {
+export function buildScene(definition, assetResolver = asset) {
   const clipTuples = definition.clips ?? definition.labels.map((label, index) => [
     label,
     `../assets/scenes/${definition.id}/clip-${index + 1}.mp4`,
@@ -144,7 +144,7 @@ function buildScene(definition) {
     clips: clipTuples.map(([label, path, startSeconds], index) => ({
       id: `clip-${index + 1}`,
       label,
-      src: asset(path),
+      src: assetResolver(path),
       durationSeconds: definition.durationSeconds ?? 8,
       startSeconds,
       ...(definition.availability === "ready" ? { subjectFocus: subjectFocusFor(definition.id, `clip-${index + 1}`) } : {}),
@@ -175,7 +175,22 @@ function buildScene(definition) {
   return scene;
 }
 
-export const SCENES = SCENE_CATALOG.map(buildScene);
+function browserPublishedScene() {
+  if (typeof window === "undefined") return null;
+  try {
+    const scene = JSON.parse(window.localStorage.getItem("video-sync-published-scene") ?? "null");
+    if (scene?.schemaVersion !== 4 || !scene.id || !Array.isArray(scene.clips) || !Array.isArray(scene.visualLoops)) return null;
+    return scene;
+  } catch {
+    return null;
+  }
+}
+
+const catalogScenes = SCENE_CATALOG.map((definition) => buildScene(definition));
+const publishedScene = browserPublishedScene();
+export const SCENES = publishedScene
+  ? [publishedScene, ...catalogScenes.filter((scene) => scene.id !== publishedScene.id)]
+  : catalogScenes;
 export const PLAYABLE_SCENES = SCENES.filter((scene) => scene.availability === "ready");
 
 export function sceneById(id) {

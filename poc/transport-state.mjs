@@ -13,6 +13,15 @@ function runtimeLoop(value) {
   }
 }
 
+function runtimeObject(value) {
+  if (!value || typeof value !== "object") return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
 export function serializeDeckRuntime(decks) {
   return JSON.stringify({
     v: 1,
@@ -23,13 +32,21 @@ export function serializeDeckRuntime(decks) {
       playing: Boolean(deck.playing),
       started: Boolean(deck.started),
       counted: Boolean(deck.counted),
+      level: Math.min(1, Math.max(0, finite(deck.level, 1))),
+      sequenceAssignment: runtimeObject(deck.sequenceAssignment),
       clipOrder: Array.isArray(deck.clipOrder) ? [...deck.clipOrder] : [],
       randomLoop: runtimeLoop(deck.randomLoop),
       activeLoopId: deck.activeLoopId,
       activeCueInput: deck.activeCueInput ?? null,
+      activeCueMetadata: runtimeObject(deck.activeCueMetadata),
+      hotCues: Array.isArray(deck.hotCues) ? runtimeObject(deck.hotCues) : [],
       cueAnchorLinkBeat: Number.isFinite(deck.cueAnchorLinkBeat) ? deck.cueAnchorLinkBeat : null,
       loopAnchorBeat: finite(deck.loopAnchorBeat),
       loopGeneration: finite(deck.loopGeneration),
+      trackTitle: typeof deck.trackTitle === "string" ? deck.trackTitle : null,
+      trackFingerprint: typeof deck.trackFingerprint === "string" ? deck.trackFingerprint : null,
+      adapterSessionId: typeof deck.adapterSessionId === "string" ? deck.adapterSessionId : null,
+      adapterLoadGeneration: Number.isFinite(deck.adapterLoadGeneration) ? deck.adapterLoadGeneration : null,
       clock: {
         bpm: finite(deck.clock?.bpm, 100),
         playing: Boolean(deck.playing),
@@ -56,15 +73,23 @@ export function parseDeckRuntime(raw, sceneIds, deckCount = 2) {
         playing,
         started: Boolean(deck.started) || playing,
         counted: Boolean(deck.counted),
+        level: Math.min(1, Math.max(0, finite(deck.level, 1))),
+        sequenceAssignment: runtimeObject(deck.sequenceAssignment),
         clipOrder: Array.isArray(deck.clipOrder)
           ? deck.clipOrder.filter((clipId) => typeof clipId === "string")
           : [],
         randomLoop: runtimeLoop(deck.randomLoop),
         activeLoopId: deck.activeLoopId,
         activeCueInput: typeof deck.activeCueInput === "string" ? deck.activeCueInput : null,
+        activeCueMetadata: runtimeObject(deck.activeCueMetadata),
+        hotCues: Array.isArray(deck.hotCues) ? runtimeObject(deck.hotCues) : [],
         cueAnchorLinkBeat: Number.isFinite(deck.cueAnchorLinkBeat) ? deck.cueAnchorLinkBeat : null,
         loopAnchorBeat: finite(deck.loopAnchorBeat),
         loopGeneration: Math.max(0, finite(deck.loopGeneration)),
+        trackTitle: typeof deck.trackTitle === "string" ? deck.trackTitle : null,
+        trackFingerprint: typeof deck.trackFingerprint === "string" ? deck.trackFingerprint : null,
+        adapterSessionId: typeof deck.adapterSessionId === "string" ? deck.adapterSessionId : null,
+        adapterLoadGeneration: Number.isFinite(deck.adapterLoadGeneration) ? deck.adapterLoadGeneration : null,
         clock: {
           bpm: finite(deck.clock?.bpm, 100),
           playing,
@@ -116,6 +141,17 @@ export class ControllerTransportTracker {
     deck.playing = Boolean(playing);
     deck.updatedAtUnixMs = updatedAtUnixMs;
     return true;
+  }
+
+  reconcile(deckNumber, playing, updatedAtUnixMs = Date.now()) {
+    const deck = this.decks[Number(deckNumber) - 1];
+    if (!deck) return false;
+    const nextPlaying = Boolean(playing);
+    const changed = !deck.known || deck.playing !== nextPlaying;
+    deck.known = true;
+    deck.playing = nextPlaying;
+    deck.updatedAtUnixMs = updatedAtUnixMs;
+    return changed;
   }
 
   snapshot(savedAtUnixMs = Date.now()) {

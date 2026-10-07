@@ -6,7 +6,7 @@ Date: 2026-09-03
 
 The new content model has replaced the original rule model in the browser POC. `Scene -> clips -> visual loops -> timeline events` is understandable, authorable, and compatible with both manual live control and agent-generated defaults. The implemented contract lives at [`schema/scene.schema.json`](../schema/scene.schema.json).
 
-It is not all proven. Automatic song-to-scene mapping depends on live track identity, which Ableton Link does not provide and generic controller MIDI may not provide. That feature must stay optional until the bridge spike identifies a reliable source. Queue-based or manual scene assignment is the safe fallback.
+It is not all proven. Deck-state v2 now fingerprints track titles that Rekordbox exposes through macOS Accessibility, allowing mouse and keyboard loads to advance the queue without making scenes track-specific. That path remains optional until it is validated across Rekordbox layouts; controller LOAD and manual queue selection remain the safe fallback.
 
 ## Recommended model
 
@@ -131,14 +131,15 @@ They should share UI and data contracts, but not unrestricted runtime behavior. 
 
 ## Bridge spike: do this before deeper authoring work
 
-The recorder foundation and first live GRV6 coexistence capture are implemented; labeled mapping and soak tests remain before a richer editor.
+The recorder foundation, first live GRV6 coexistence capture, and deck-state v2 inference layer are implemented; fresh Accessibility captures and soak tests remain before a richer editor.
 
 ### Inputs to probe
 
-- read-only Ableton Link snapshots: tempo, beat/time mapping, phase at 4/8/16-beat quanta, optional start/stop intent, peer state;
+- visible Rekordbox deck state: BPM, playhead motion/stability, track title, cue timestamp/type/bounds, and labeled phase confidence;
+- optional read-only Ableton Link snapshots: tempo, beat/time mapping, phase at 4/8/16-beat quanta, optional start/stop intent, peer state;
 - passive DDJ-GRV6 MIDI for play/pause, Hot Cues A-C, channel faders, and crossfader;
 - Rekordbox MIDI indicator output only as a secondary state probe if it adds something the controller cannot expose;
-- audio-loop wrap/reset if available, otherwise deterministic configured-length prediction;
+- Accessibility-observed audio-loop bounds and playhead wraps when available, otherwise the authored cue contract;
 - endpoint availability and behavior across disconnect/reconnect.
 
 ### Output contract
@@ -147,17 +148,17 @@ Record both raw evidence and normalized events. Every normalized field should ca
 
 ### Minimum success criteria
 
-- Video Sync joins Link without proposing tempo or transport changes.
-- Beat/time conversion remains stable through tempo changes and Link loss/rejoin.
+- Absolute deck transport converges correctly when Video Sync starts during both playback and pause.
+- Beat/time conversion remains stable through tempo changes, seeks, cue jumps, and manual phase correction.
 - The minimum GRV6 controls remain observable by a second process without affecting Rekordbox.
 - Recorded input can replay deterministically into the viewer and produce the same sequence decisions.
 - No Rekordbox audio glitch, controller behavior change, or measurable render-thread blocking occurs during a 30-minute baseline.
 
-Failure to observe track identity does not kill the product. It means v1 uses queue/manual scene assignment and defers automatic per-track mapping.
+Failure to observe track identity in a particular layout does not kill the product. That layout uses controller LOAD or manual queue assignment and reports identity as unavailable.
 
 ## Recommended order
 
-1. Run the implemented Link/direct-GRV6 recorder with Rekordbox and complete labeled A/B deck captures.
+1. Run the implemented deck-state v2/direct-GRV6 recorder with Rekordbox and complete labeled A/B deck captures.
 2. Freeze the normalized bridge event contract based on observed data.
 3. Build compact queue-oriented Live mode on the implemented visual-loop contract.
 4. Expand the same shell into Author mode.

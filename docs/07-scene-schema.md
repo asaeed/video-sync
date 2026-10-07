@@ -43,7 +43,7 @@ Clips have no permanent base, accent, or flash role. The same clip can be full-f
 }
 ```
 
-The POC uses one optimized MP4 per numbered clip. `clip.startSeconds` is its default in-point and is copied into generated timeline events; an event can override it with `source.startSeconds`. `subjectFocus` is an authoring-time suggestion in normalized frame coordinates. V4 does not yet model an out-point. The authoring roadmap adds reusable media ranges (`mediaId`, `inSeconds`, `outSeconds`) while retaining the option to prerender each range as a standalone performance file.
+The POC uses one optimized MP4 per numbered clip. `clip.startSeconds` is its default in-point and is copied into generated timeline events; an event can override it with `source.startSeconds`. `subjectFocus` is an authoring-time suggestion in normalized frame coordinates. Scene Studio compiles reusable source ranges into events with explicit `source.startSeconds` and `source.endSeconds`, while retaining the option to prerender each range as a standalone performance file.
 
 ### Visual loop and timeline events
 
@@ -82,7 +82,9 @@ The POC uses one optimized MP4 per numbered clip. `clip.startSeconds` is its def
 
 `at` and `duration` are musical positions. In 4/4, one bar is four beats and a 1/16 note is `0.25` beats. Events may overlap; `z` controls their order. An empty filter array means raw video.
 
-`appearance.motion` is optional and belongs to this occurrence of the clip, not the clip file. A Ken Burns motion interpolates between two scale/focus keyframes. Focus coordinates are normalized across the frame: `{ "x": 0, "y": 0 }` is top-left and `{ "x": 1, "y": 1 }` is bottom-right. `focusSource: "clip-subject"` lets a repeated scene use the focus point belonging to the actual shuffled clip; omit it to keep the keyframes' explicit coordinates. `progress: "loop"` makes the move span the whole musical loop even if that clip appears in several alternating events; `"event"` restarts it for each event. The renderer clamps pan to the zoom overscan so no empty edge is exposed.
+Studio-published scenes additionally set `lanePriority: "top"` on the scene and an integer `lane` on every timeline event. In those scenes, only the active event in the highest occupied lane (lowest lane number) is displayed; a lower event continues to be timed against the beat clock while hidden, so it resumes at its correct media position when uncovered. The older built-in scene catalog omits `lanePriority` and retains its `z`-based overlay behavior.
+
+`appearance.motion` is optional and belongs to this occurrence of the clip, not the clip file. A Ken Burns motion interpolates between two scale/focus keyframes. Focus coordinates are normalized across the frame: `{ "x": 0, "y": 0 }` is top-left and `{ "x": 1, "y": 1 }` is bottom-right. `focusSource: "clip-subject"` lets a repeated scene use the focus point belonging to the actual shuffled clip; omit it to keep the keyframes' explicit coordinates. `progress: "loop"` makes the move span the whole musical loop even if that clip appears in several alternating events; `"event"` restarts it for each event. Optional `speed` multiplies that progress (`1` is the authored duration, `2` reaches the target halfway through, and `0.5` gets halfway there before the event repeats). The renderer clamps pan to the zoom overscan so no empty edge is exposed.
 
 For the current playable catalog, subject points were suggested offline from representative frames using face detection followed by attention saliency. This analysis never runs in the player. An authoring UI should show the suggested point over the frame, allow drag-to-correct, and fall back to a restrained centered zoom when confidence is weak or the subject moves significantly.
 

@@ -13,7 +13,8 @@ export function resolveVisualLoop(scene, activeLoopId, beat, options = {}) {
   const generation = options.loopGeneration ?? 0;
   if (!options.started) {
     const firstEvent = [...visualLoop.events]
-      .sort((left, right) => musicalToBeats(left.at) - musicalToBeats(right.at))[0];
+      .sort((left, right) => musicalToBeats(left.at) - musicalToBeats(right.at)
+        || (scene.lanePriority === "top" ? (left.lane ?? 0) - (right.lane ?? 0) : 0))[0];
     return firstEvent ? [toInstance(visualLoop, firstEvent, `preview:${generation}:${firstEvent.id}`, 0, 0)] : [];
   }
 
@@ -22,7 +23,7 @@ export function resolveVisualLoop(scene, activeLoopId, beat, options = {}) {
   const relativeBeat = beat - (options.loopAnchorBeat ?? 0);
   const loopBeat = positiveModulo(relativeBeat, lengthBeats);
 
-  return visualLoop.events.flatMap((event) => {
+  const active = visualLoop.events.flatMap((event) => {
     const startBeat = musicalToBeats(event.at);
     const durationBeats = musicalToBeats(event.duration);
     const elapsed = positiveModulo(loopBeat - startBeat, lengthBeats);
@@ -30,7 +31,13 @@ export function resolveVisualLoop(scene, activeLoopId, beat, options = {}) {
     const occurrence = Math.floor((relativeBeat - startBeat) / lengthBeats);
     const progress = Math.min(1, Math.max(0, elapsed / durationBeats));
     return [toInstance(visualLoop, event, `${generation}:${occurrence}:${event.id}`, progress, loopBeat / lengthBeats, elapsed)];
-  }).sort((left, right) => left.z - right.z);
+  });
+  if (scene.lanePriority === "top" && active.length) {
+    if (visualLoop.compositing === "layers") return active.sort((left, right) => right.lane - left.lane);
+    const topLane = Math.min(...active.map((instance) => instance.lane));
+    return active.filter((instance) => instance.lane === topLane).slice(0, 1);
+  }
+  return active.sort((left, right) => left.z - right.z);
 }
 
 function appearanceOpacity(event, progress) {
@@ -48,6 +55,7 @@ function toInstance(visualLoop, event, occurrenceKey, progress, loopProgress, el
     nodeKey: `${visualLoop.id}:${event.id}`,
     occurrenceKey,
     clipId: event.clipId,
+    lane: event.lane ?? 0,
     source: event.source,
     z: event.appearance.z,
     opacity: appearanceOpacity(event, progress),

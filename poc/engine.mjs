@@ -123,7 +123,9 @@ class DeckRuntime {
   restartInPointLoop(video) {
     if (video.dataset.loopFromInPoint !== "true" || !video.classList.contains("is-visible")) return;
     const startSeconds = Number(video.dataset.loopStartSeconds) || 0;
-    const lastFrame = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.04) : startSeconds;
+    const configuredEnd = Number(video.dataset.loopEndSeconds);
+    const mediaLastFrame = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.04) : startSeconds;
+    const lastFrame = Number.isFinite(configuredEnd) ? Math.min(mediaLastFrame, configuredEnd - 0.04) : mediaLastFrame;
     video.currentTime = Math.min(startSeconds, lastFrame);
     if (this.state.playing) video.play().catch(() => {});
   }
@@ -148,13 +150,14 @@ class DeckRuntime {
       loopGeneration: this.state.loopGeneration,
     });
     const visibleNodes = new Set();
+    const previouslyVisible = new Set([...this.eventNodes.values()].filter((video) => video.classList.contains("is-visible")));
 
     for (const video of this.eventNodes.values()) {
       video.classList.remove("is-visible");
       video.hidden = true;
     }
     for (const instance of instances) {
-      const node = this.showInstance(instance);
+      const node = this.showInstance(instance, previouslyVisible.has(this.eventNodes.get(instance.nodeKey)));
       if (node) visibleNodes.add(node);
     }
 
@@ -177,18 +180,24 @@ class DeckRuntime {
     return { active: activeNodes.length, dropped, beat };
   }
 
-  showInstance(instance) {
+  showInstance(instance, wasVisible = false) {
     const node = this.eventNodes.get(instance.nodeKey);
     if (!node) return null;
     node.hidden = false;
-    if (node.dataset.occurrenceKey !== instance.occurrenceKey) {
+    if (node.dataset.occurrenceKey !== instance.occurrenceKey || !wasVisible) {
       node.dataset.occurrenceKey = instance.occurrenceKey;
       const loopsFromInPoint = Boolean(instance.source.loop) && instance.source.startSeconds > 0;
       node.loop = Boolean(instance.source.loop) && !loopsFromInPoint;
       node.dataset.loopFromInPoint = String(loopsFromInPoint);
       node.dataset.loopStartSeconds = String(instance.source.startSeconds);
+      node.dataset.loopEndSeconds = String(instance.source.endSeconds ?? "");
       node.playbackRate = instance.source.rate ?? 1;
       seekVideo(node, instance.source, instance.elapsedBeats, this.state.clock.bpm, instance.occurrenceKey);
+    }
+    const configuredEnd = Number(node.dataset.loopEndSeconds);
+    if (Number.isFinite(configuredEnd) && node.currentTime >= configuredEnd - 0.04) {
+      if (node.dataset.loopFromInPoint === "true") node.currentTime = Number(node.dataset.loopStartSeconds) || 0;
+      else if (!instance.source.loop) node.pause();
     }
     node.classList.add("is-visible");
     node.style.zIndex = String(instance.z);

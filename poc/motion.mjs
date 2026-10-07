@@ -25,7 +25,8 @@ export function kenBurnsFrame(motion, progress) {
 
   const start = normalizeKeyframe(motion.start);
   const end = normalizeKeyframe(motion.end, start);
-  const time = easedProgress(motion.easing, progress);
+  const speed = clamp(Number(motion.speed) || 1, 0.1, 4);
+  const time = easedProgress(motion.easing, (Number(progress) || 0) * speed);
   const scale = lerp(start.scale, end.scale, time);
   const focusX = lerp(start.focus.x, end.focus.x, time);
   const focusY = lerp(start.focus.y, end.focus.y, time);

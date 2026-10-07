@@ -38,13 +38,13 @@ Deck 2 should not be assumed to become sync master merely because it is louder o
 
 ## Questions best answered by hands-on tests
 
-1. When Link is enabled globally and on both active Rekordbox decks, does it preserve the exact normal mixing workflow?
-2. Which load, audio-loop reset, and Beat FX events are still missing after the confirmed direct-GRV6 mappings?
-3. Can any reliable, documented or safely observed live source identify the track loaded on each deck? Without it, per-song scene mappings remain manual/queue-driven.
-4. Does Rekordbox emit a stable event on every audio-loop wrap, or must the visual loop rely on its configured length and explicit cue re-triggers?
+1. Does visible title extraction remain stable across Rekordbox layouts, window sizes, and two-deck/four-deck modes?
+2. Which Rekordbox layouts expose a loop cue label, end time, or beat length through Accessibility, and which expose only a cue timestamp?
+3. How much phase error remains in the playhead-derived clock at slow and fast tempos, before and after **Tap downbeat** correction?
+4. Which audio-loop reset and Beat FX events are still missing after the confirmed direct-GRV6 mappings?
 5. Does the initial linear visual crossfade feel right, or should it eventually follow Rekordbox's selected crossfader curve?
 6. If the incoming deck becomes dominant before play/hot-cue is observable, what threshold and debounce feel natural?
-7. When Link disappears, should Player continue indefinitely at last tempo or warn and freeze automatic scene advancement after a timeout?
+7. When every live clock source disappears, should Player continue indefinitely at last tempo or warn and freeze automatic scene advancement after a timeout?
 8. Which projector model/connection will be used for the first real latency and soak test?
 
-These do not block reviewing the browser POC. They do block claiming that the full live Rekordbox/GRV6 workflow is performance-qualified.
+The current test rig showed that enabling Link changed the normal Beat Sync workflow, so Link is optional and disabled for the primary macOS path. The deck-state v2 contract now covers transport inference, visible identity, cue metadata, and labeled phase estimates, but the Accessibility fields still require a fresh loaded-track capture before they are hardware-qualified.

@@ -14,11 +14,21 @@ export function rekordboxTempoPlan(message, runtimeDecks = [], opacities = []) {
     const deck = Number(entry?.deck);
     const bpm = Number(entry?.bpm);
     if (!entry?.loaded || !Number.isInteger(deck) || deck < 1 || deck > 4 || !(bpm >= 40 && bpm <= 300)) return [];
-    return [{ deck, bpm }];
+    return [{
+      ...entry,
+      deck,
+      bpm,
+      beatPosition: typeof entry.beatPosition === "number" && Number.isFinite(entry.beatPosition) ? entry.beatPosition : null,
+      beatPhase: typeof entry.beatPhase === "number" && Number.isFinite(entry.beatPhase) ? entry.beatPhase : null,
+      transportKnown: Boolean(entry.transportKnown),
+      playing: Boolean(entry.playing),
+    }];
   });
   if (decks.length === 0) return null;
 
-  const playing = decks.filter((entry) => runtimeDecks[entry.deck - 1]?.playing);
+  const playing = decks.filter((entry) => entry.transportKnown
+    ? entry.playing
+    : runtimeDecks[entry.deck - 1]?.playing);
   const candidates = playing.length > 0 ? playing : decks;
   const source = candidates.reduce((best, candidate) => {
     const bestOpacity = Number(opacities[best.deck - 1]) || 0;
@@ -26,6 +36,37 @@ export function rekordboxTempoPlan(message, runtimeDecks = [], opacities = []) {
     return candidateOpacity > bestOpacity ? candidate : best;
   });
   return { bpm: source.bpm, sourceDeck: source.deck, decks };
+}
+
+export function clockFromRekordboxDeck(deckState, currentClock, epochMs) {
+  const bpm = Number(deckState?.bpm);
+  if (!(bpm >= 40 && bpm <= 300) || !Number.isFinite(epochMs)) return currentClock;
+  const playing = deckState?.transportKnown ? Boolean(deckState.playing) : Boolean(currentClock?.playing);
+  const observedBeat = typeof deckState?.beatPosition === "number" ? deckState.beatPosition : NaN;
+  if (Number.isFinite(observedBeat)) {
+    const currentBeat = currentClock?.playing
+      ? (Number(currentClock.anchorBeat) || 0) + ((epochMs - currentClock.anchorEpochMs) * currentClock.bpm) / 60000
+      : (Number(currentClock?.anchorBeat) || 0);
+    const phaseError = observedBeat - currentBeat;
+    const canSmooth = Boolean(currentClock?.playing) === playing && Math.abs(phaseError) <= 0.5;
+    const correctedBeat = canSmooth ? currentBeat + phaseError * 0.2 : observedBeat;
+    return {
+      bpm,
+      playing,
+      anchorBeat: correctedBeat,
+      anchorEpochMs: epochMs,
+    };
+  }
+  const elapsedBeats = currentClock?.playing
+    ? ((epochMs - currentClock.anchorEpochMs) * currentClock.bpm) / 60000
+    : 0;
+  return {
+    ...currentClock,
+    bpm,
+    playing,
+    anchorBeat: (Number(currentClock?.anchorBeat) || 0) + elapsedBeats,
+    anchorEpochMs: epochMs,
+  };
 }
 
 export function transportEntriesForEvent(state) {

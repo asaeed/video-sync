@@ -6,6 +6,8 @@ import { dirname, extname, join, normalize, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { isSafeBridgeReplay } from "./bridge-replay.mjs";
+import { RekordboxStateTracker } from "./rekordbox-state.mjs";
+import { createStudioProjectApi } from "./studio-projects.mjs";
 import { ControllerTransportTracker } from "./transport-state.mjs";
 
 const root = normalize(join(dirname(fileURLToPath(import.meta.url)), ".."));
@@ -18,6 +20,7 @@ const bridgeMapPath = process.env.VIDEO_SYNC_BRIDGE_MAP || join(root, "bridge", 
 const bridgeMidiPortName = process.env.VIDEO_SYNC_MIDI_PORT_NAME || "DDJ-GRV6";
 const bridgeMidiMode = process.env.VIDEO_SYNC_MIDI_MODE === "virtual" ? "virtual" : "direct";
 const bridgeEnabled = process.env.VIDEO_SYNC_BRIDGE !== "off";
+const rekordboxDumpElements = process.env.VIDEO_SYNC_REKORDBOX_DUMP_ELEMENTS === "1";
 const bridgeClients = new Set();
 const recentBridgeMessages = [];
 let latestLinkMessage = null;
@@ -29,8 +32,11 @@ try {
   // The first run has no saved controller parity yet.
 }
 const controllerTransport = new ControllerTransportTracker(2, savedTransportState);
+const rekordboxStateTracker = new RekordboxStateTracker(2);
 let transportWrite = Promise.resolve();
 let bridgeProcess = null;
+let bridgeRestartTimer = null;
+let bridgeRestartAttempt = 0;
 let rekordboxAdapterProcess = null;
 let shuttingDown = false;
 let bridgeState = {
@@ -56,7 +62,9 @@ const mime = {
   ".mjs": "text/javascript; charset=utf-8",
   ".mp4": "video/mp4",
   ".png": "image/png",
+  ".webm": "video/webm",
 };
+const handleStudioProjectRequest = createStudioProjectApi(root, mime);
 
 function sendEvent(response, event, value) {
   response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
@@ -76,6 +84,17 @@ function updateRekordboxAdapterState(state, detail) {
   broadcast("rekordbox-adapter-status", rekordboxAdapterState);
 }
 
+function scheduleBridgeRestart(detail) {
+  if (shuttingDown || !bridgeEnabled || bridgeRestartTimer) return;
+  bridgeRestartAttempt += 1;
+  const delayMs = Math.min(10_000, 1_000 * (2 ** Math.min(bridgeRestartAttempt - 1, 3)));
+  updateBridgeState("waiting", `${detail} Retrying in ${(delayMs / 1000).toFixed(0)}s…`);
+  bridgeRestartTimer = setTimeout(() => {
+    bridgeRestartTimer = null;
+    startBridge();
+  }, delayMs);
+}
+
 function publishControllerTransport(changedDeck) {
   broadcast("controller-transport", { ...controllerTransport.snapshot(), changedDeck });
 }
@@ -89,12 +108,27 @@ function persistControllerTransport() {
 }
 
 function publishBridgeMessage(message) {
+  if (["controller.control", "rekordbox.control"].includes(message.type)) {
+    rekordboxStateTracker.observeControl(message.payload, message.emittedAtUnixMs);
+  }
   const transportChanged = ["controller.control", "rekordbox.control"].includes(message.type) &&
     controllerTransport.observe(message.payload, message.emittedAtUnixMs);
   const publishTransportAfterControl = ["deck.load", "track.load"].includes(message.payload?.event);
   if (transportChanged) {
     persistControllerTransport();
     if (!publishTransportAfterControl) publishControllerTransport(Number(message.payload.deck));
+  }
+  let authoritativeTransportChanged = false;
+  if (message.type === "rekordbox.deck-state" && message.payload?.contractVersion === 2) {
+    for (const deck of message.payload.decks ?? []) {
+      if (!deck.transportKnown) continue;
+      authoritativeTransportChanged = controllerTransport.reconcile(
+        deck.deck,
+        deck.playing,
+        deck.transportChangedAtUnixMs ?? message.emittedAtUnixMs,
+      ) || authoritativeTransportChanged;
+    }
+    if (authoritativeTransportChanged) persistControllerTransport();
   }
   if (message.type === "link.clock") latestLinkMessage = message;
   else if (message.type === "rekordbox.deck-state") latestRekordboxState = message;
@@ -105,17 +139,19 @@ function publishBridgeMessage(message) {
     if (recentBridgeMessages.length > 30) recentBridgeMessages.shift();
   }
   if (message.type === "bridge.ready") {
+    bridgeRestartAttempt = 0;
     const midiSource = message.payload.midiMode === "existing-port"
       ? `controller ${message.payload.midiPortName}`
       : `virtual input ${message.payload.virtualMidiName}`;
     updateBridgeState("running", `Listening to ${midiSource} alongside Rekordbox. Raw capture: ${bridgeRecordPath}`);
   }
   broadcast("bridge-message", message);
+  if (authoritativeTransportChanged) publishControllerTransport();
   if (transportChanged && publishTransportAfterControl) publishControllerTransport(Number(message.payload.deck));
 }
 
 async function startBridge() {
-  if (!bridgeEnabled) return;
+  if (!bridgeEnabled || shuttingDown || bridgeProcess) return;
   try {
     await stat(bridgeBinary);
     await mkdir(dirname(bridgeRecordPath), { recursive: true });
@@ -146,7 +182,8 @@ async function startBridge() {
   bridgeProcess.on("exit", (code, signal) => {
     bridgeProcess = null;
     if (shuttingDown) return;
-    updateBridgeState("exited", lastError || `Bridge exited with ${signal ? `signal ${signal}` : `code ${code}`}.`);
+    const detail = lastError || `Bridge exited with ${signal ? `signal ${signal}` : `code ${code}`}.`;
+    scheduleBridgeRestart(detail);
   });
 }
 
@@ -159,11 +196,12 @@ async function startRekordboxAdapter() {
     return;
   }
 
-  rekordboxAdapterProcess = spawn(rekordboxAdapterBinary, [], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const args = rekordboxDumpElements ? ["--dump-elements"] : [];
+  rekordboxAdapterProcess = spawn(rekordboxAdapterBinary, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   const lines = createInterface({ input: rekordboxAdapterProcess.stdout });
   lines.on("line", (line) => {
     try {
-      publishBridgeMessage(JSON.parse(line));
+      publishBridgeMessage(rekordboxStateTracker.observe(JSON.parse(line)));
     } catch {
       updateRekordboxAdapterState("error", `Rekordbox adapter returned invalid JSON: ${line.slice(0, 100)}`);
     }
@@ -185,6 +223,8 @@ async function startRekordboxAdapter() {
 
 const server = createServer(async (request, response) => {
   const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+
+  if (await handleStudioProjectRequest(request, response, requestUrl)) return;
 
   if (requestUrl.pathname === "/api/bridge/status") {
     response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -277,6 +317,8 @@ const heartbeat = setInterval(() => {
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (bridgeRestartTimer) clearTimeout(bridgeRestartTimer);
+  bridgeRestartTimer = null;
   clearInterval(heartbeat);
   for (const response of bridgeClients) response.end();
   bridgeClients.clear();

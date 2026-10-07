@@ -15,7 +15,22 @@
     "media:archive": "node scripts/fetch-archive-scene.mjs",
     "media:validate": "node scripts/validate-scene-catalog.mjs",
     "scenes:export": "node scripts/export-scene-contracts.mjs",
+    "studio:build": "vite build --config studio/vite.config.ts",
+    "studio:dev": "vite --config studio/vite.config.ts",
+    "studio:test": "playwright test --config studio/playwright.config.ts",
     "dev": "node poc/server.mjs",
     "test": "node --test poc/tests/*.test.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
   }
 }

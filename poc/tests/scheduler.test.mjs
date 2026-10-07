@@ -4,12 +4,12 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tickFrequency } from "../metronome.mjs";
-import { clockFromLinkMessage, commandFromController, rekordboxTempoPlan, resolveHotCueRoute, transportEntriesForEvent } from "../bridge-controls.mjs";
+import { clockFromLinkMessage, clockFromRekordboxDeck, commandFromController, rekordboxTempoPlan, resolveHotCueRoute, transportEntriesForEvent } from "../bridge-controls.mjs";
 import { isSafeBridgeReplay } from "../bridge-replay.mjs";
 import { BEAT_FX_CATALOG, beatFxFrame, effectAppliesToDeck, stepBeatMultiplier } from "../effects.mjs";
 import { computeDeckOpacities, dominantDeck } from "../mix.mjs";
 import { createPhraseClock, phraseBeatAt, syncPhraseClock, visualLoopWindows } from "../phrase-transport.mjs";
-import { phrasePosition, SongCounter, noteToBeats } from "../scheduler.mjs";
+import { phrasePosition, resyncClockAtQuantum, SongCounter, noteToBeats } from "../scheduler.mjs";
 import { filtersToCss, musicalToBeats, resolveVisualLoop } from "../sequencer.mjs";
 import { compileTwoClipLoop, TWO_CLIP_RECIPE_TYPES } from "../loop-recipes.mjs";
 import { SceneQueue } from "../scene-queue.mjs";
@@ -18,8 +18,10 @@ import { generateRandomLoop } from "../random-loop.mjs";
 import { combineTransforms, kenBurnsFrame, motionWithClipSubject } from "../motion.mjs";
 import { SUBJECT_FOCUS, subjectFocusFor } from "../ken-burns-library.mjs";
 import { ControllerTransportTracker, parseDeckRuntime, serializeDeckRuntime } from "../transport-state.mjs";
-import { crossedHotCues } from "../cue-crossings.mjs";
+import { parsePlayerState, serializePlayerState } from "../player-state.mjs";
+import { crossedHotCues, detectedLoopWrap } from "../cue-crossings.mjs";
 import { mediaTimeForMusicalOffset } from "../media-time.mjs";
+import { estimateBeatPosition, fingerprintForTrack, normalizeHotCues, RekordboxStateTracker } from "../rekordbox-state.mjs";
 import { PLAYABLE_SCENES, SCENES } from "../scene-registry.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -46,6 +48,14 @@ test("the 16-bar phrase counter wraps continuously", () => {
   assert.equal(phrasePosition(63.5).bar, 16);
   assert.equal(phrasePosition(64).bar, 1);
   assert.equal(phrasePosition(66).barProgress, 0.5);
+});
+
+test("manual phase correction snaps to a bar without changing clock rate", () => {
+  const result = resyncClockAtQuantum({ bpm: 120, playing: true, anchorBeat: 1, anchorEpochMs: 1000 }, 2000, 4);
+  assert.equal(result.clock.bpm, 120);
+  assert.equal(result.clock.anchorBeat, 4);
+  assert.equal(result.clock.anchorEpochMs, 2000);
+  assert.equal(result.beatDelta, 1);
 });
 
 test("the phrase clock runs only while a deck is playing and restarts at bar one", () => {
@@ -153,14 +163,13 @@ test("visible Rekordbox deck BPM overrides the generic Link-session tempo", () =
       ],
     },
   };
-  assert.deepEqual(rekordboxTempoPlan(message, [
+  const plan = rekordboxTempoPlan(message, [
     { playing: false },
     { playing: true },
-  ], [0.8, 0.2]), {
-    bpm: 124.5,
-    sourceDeck: 2,
-    decks: [{ deck: 1, bpm: 90 }, { deck: 2, bpm: 124.5 }],
-  });
+  ], [0.8, 0.2]);
+  assert.equal(plan.bpm, 124.5);
+  assert.equal(plan.sourceDeck, 2);
+  assert.deepEqual(plan.decks.map(({ deck, bpm }) => ({ deck, bpm })), [{ deck: 1, bpm: 90 }, { deck: 2, bpm: 124.5 }]);
   assert.deepEqual(rekordboxTempoPlan(message, [
     { playing: true },
     { playing: true },
@@ -169,6 +178,184 @@ test("visible Rekordbox deck BPM overrides the generic Link-session tempo", () =
     type: "rekordbox.deck-state",
     payload: { decks: [{ deck: 1, loaded: false, bpm: null }] },
   }), null);
+});
+
+test("Rekordbox deck-state v2 infers absolute play and pause from playhead motion", () => {
+  const tracker = new RekordboxStateTracker(2, { pauseConfirmMs: 500, sessionId: "test-session" });
+  const messageAt = (epochMs, positionSeconds, title = "Test Track") => tracker.observe({
+    v: 1,
+    seq: epochMs,
+    sourceTimeUs: epochMs * 1000,
+    emittedAtUnixMs: epochMs,
+    source: "rekordbox-accessibility",
+    type: "rekordbox.deck-state",
+    payload: { decks: [{ deck: 1, loaded: true, bpm: 120, positionSeconds, trackTitle: title, hotCues: [] }] },
+  }).payload.decks[0];
+
+  const initial = messageAt(1000, 8);
+  assert.equal(initial.transportKnown, false);
+  assert.equal(initial.loadGeneration, 1);
+  const moving = messageAt(1150, 8.2);
+  assert.equal(moving.transportKnown, true);
+  assert.equal(moving.playing, true);
+  assert.equal(moving.transportBasis, "playhead-motion");
+  messageAt(1300, 8.2);
+  messageAt(1600, 8.2);
+  const paused = messageAt(1800, 8.2);
+  assert.equal(paused.transportKnown, true);
+  assert.equal(paused.playing, false);
+  assert.equal(paused.transportBasis, "playhead-stable");
+});
+
+test("a controller stop hint is not immediately undone by a stale moving playhead sample", () => {
+  const tracker = new RekordboxStateTracker(1, { pauseConfirmMs: 500, sessionId: "hint" });
+  const observe = (epochMs, positionSeconds) => tracker.observe({
+    emittedAtUnixMs: epochMs,
+    source: "rekordbox-accessibility",
+    type: "rekordbox.deck-state",
+    payload: { decks: [{ deck: 1, loaded: true, bpm: 120, positionSeconds, trackTitle: "Test", hotCues: [] }] },
+  }).payload.decks[0];
+  observe(1000, 2);
+  assert.equal(observe(1150, 2.2).playing, true);
+  tracker.observeControl({ event: "deck.play", deck: 1, active: true }, 1200);
+  const stale = observe(1300, 2.3);
+  assert.equal(stale.playing, false);
+  assert.equal(stale.transportBasis, "controller-hint");
+});
+
+test("visible track identity creates stable fingerprints and load generations", () => {
+  assert.equal(fingerprintForTrack({ title: "  Blue Monday ", artist: "New Order" }), fingerprintForTrack({ title: "blue monday", artist: "new order" }));
+  const tracker = new RekordboxStateTracker(1, { sessionId: "loads" });
+  const observe = (epochMs, title, positionSeconds = 0) => tracker.observe({
+    emittedAtUnixMs: epochMs,
+    source: "rekordbox-accessibility",
+    type: "rekordbox.deck-state",
+    payload: { decks: [{ deck: 1, loaded: true, bpm: 100, positionSeconds, trackTitle: title, hotCues: [] }] },
+  }).payload.decks[0];
+  const first = observe(1000, "First Track");
+  const same = observe(1200, "First Track", 0.2);
+  const second = observe(1400, "Second Track");
+  assert.equal(first.loadGeneration, 1);
+  assert.equal(same.loadGeneration, 1);
+  assert.equal(second.loadGeneration, 2);
+  assert.equal(second.loadChanged, true);
+  assert.notEqual(second.trackFingerprint, first.trackFingerprint);
+});
+
+test("deck-state phase uses coherent hot-cue positions and anchors the render clock", () => {
+  const phase = estimateBeatPosition({
+    bpm: 120,
+    positionSeconds: 10.25,
+    hotCues: [
+      { cueIndex: 0, timeSeconds: 4.25 },
+      { cueIndex: 1, timeSeconds: 8.25 },
+      { cueIndex: 2, timeSeconds: 12.25 },
+    ],
+  });
+  assert.equal(phase.phaseBasis, "hot-cue-grid-estimate");
+  assert.equal(phase.phaseConfidence, "medium");
+  assert.ok(Math.abs(phase.beatPhase) < 0.0001);
+  assert.deepEqual(clockFromRekordboxDeck({ bpm: 120, beatPosition: 20, transportKnown: true, playing: true }, {
+    bpm: 100,
+    playing: false,
+    anchorBeat: 0,
+    anchorEpochMs: 0,
+  }, 5000), {
+    bpm: 120,
+    playing: true,
+    anchorBeat: 20,
+    anchorEpochMs: 5000,
+  });
+  const smoothed = clockFromRekordboxDeck({ bpm: 120, beatPosition: 20.9, transportKnown: true, playing: true }, {
+    bpm: 120,
+    playing: true,
+    anchorBeat: 20,
+    anchorEpochMs: 5000,
+  }, 5500);
+  assert.ok(Math.abs(smoothed.anchorBeat - 20.98) < 0.0001);
+});
+
+test("hot-cue metadata survives normalization and identifies an observed audio-loop wrap", () => {
+  const [loop] = normalizeHotCues([{
+    cueIndex: 1,
+    timeSeconds: 32,
+    kind: "loop",
+    endTimeSeconds: 34,
+    lengthBeats: 4,
+    metadataBasis: "accessibility-label",
+  }]);
+  assert.equal(loop.kind, "loop");
+  const wrap = detectedLoopWrap({
+    positionSeconds: 33.9,
+    epochMs: 1000,
+  }, {
+    positionSeconds: 32.1,
+    epochMs: 1200,
+  }, { playing: true, activeCue: loop, bpm: 120 });
+  assert.equal(wrap.cueIndex, 1);
+  assert.ok(Math.abs(wrap.wrappedAtEpochMs - 1100) < 0.001);
+  assert.equal(detectedLoopWrap({ positionSeconds: 33.9, epochMs: 1000 }, { positionSeconds: 32.1, epochMs: 1200 }, {
+    playing: true,
+    activeCue: { ...loop, kind: "cue" },
+    bpm: 120,
+  }), null);
+});
+
+test("temporarily hidden Rekordbox cue pads retain the last timeline for the same track", () => {
+  const tracker = new RekordboxStateTracker(1, { sessionId: "cue-visibility" });
+  const observe = (epochMs, {
+    title = "Same Track",
+    positionSeconds,
+    hotCues = [],
+    hotCueMetadataVisible,
+  }) => tracker.observe({
+    emittedAtUnixMs: epochMs,
+    source: "rekordbox-accessibility",
+    type: "rekordbox.deck-state",
+    payload: {
+      decks: [{
+        deck: 1,
+        loaded: true,
+        bpm: 120,
+        positionSeconds,
+        trackTitle: title,
+        hotCues,
+        hotCueMetadataVisible,
+      }],
+    },
+  }).payload.decks[0];
+
+  const visible = observe(1000, {
+    positionSeconds: 7.8,
+    hotCueMetadataVisible: true,
+    hotCues: [{ cueIndex: 0, timeSeconds: 8, kind: "cue" }],
+  });
+  assert.equal(visible.hotCueMetadataBasis, "visible");
+  assert.equal(visible.hotCues.length, 1);
+
+  const hidden = observe(1200, {
+    positionSeconds: 8.2,
+    hotCueMetadataVisible: false,
+  });
+  assert.equal(hidden.hotCueMetadataBasis, "cached");
+  assert.equal(hidden.hotCueMetadataVisible, false);
+  assert.deepEqual(hidden.hotCues, visible.hotCues);
+
+  const nextTrack = observe(1400, {
+    title: "Next Track",
+    positionSeconds: 0,
+    hotCueMetadataVisible: false,
+  });
+  assert.equal(nextTrack.hotCueMetadataBasis, "unavailable");
+  assert.deepEqual(nextTrack.hotCues, []);
+
+  const reloadedKnownTrack = observe(1600, {
+    title: "Same Track",
+    positionSeconds: 0,
+    hotCueMetadataVisible: false,
+  });
+  assert.equal(reloadedKnownTrack.hotCueMetadataBasis, "cached");
+  assert.deepEqual(reloadedKnownTrack.hotCues, visible.hotCues);
 });
 
 test("passive hot-cue crossings interpolate the actual crossing time and reject seeks", () => {
@@ -336,6 +523,31 @@ test("deck runtime transport and scene survive a browser reload", () => {
   assert.equal(restored[0].clock.playing, true);
 });
 
+test("player state keeps tempo, mix, effects, deck levels, and active cue across reloads", () => {
+  const deck = {
+    sceneId: "metropolis-machine", generation: 2, loaded: true, playing: true, started: true, counted: true,
+    level: 0.42, clipOrder: ["clip-1"], randomLoop: null, activeLoopId: "cue-b-loop", activeCueInput: "hotCueB",
+    loopAnchorBeat: 8, loopGeneration: 3, clock: { bpm: 123.45, playing: true, anchorBeat: 12, anchorEpochMs: 1000 },
+  };
+  const snapshot = {
+    decks: [deck], linkClock: { bpm: 123.45, playing: true, anchorBeat: 12, anchorEpochMs: 1000 },
+    phraseClock: { bpm: 123.45, playing: true, anchorBeat: 4, anchorEpochMs: 1000 },
+    crossfader: 0.73, songCount: 5,
+    effects: { beatFx: { selected: "delay", enabled: true, target: "deck1", depth: 0.65, beatMultiplier: 2 } },
+  };
+  const restored = parsePlayerState(serializePlayerState(snapshot, { metronomeEnabled: true, bridgeDrawerOpen: true }), ["metropolis-machine"], 1);
+  assert.equal(restored.decks[0].level, 0.42);
+  assert.equal(restored.decks[0].activeCueInput, "hotCueB");
+  assert.equal(restored.linkClock.bpm, 123.45);
+  assert.equal(restored.phraseClock.anchorBeat, 4);
+  assert.equal(restored.crossfader, 0.73);
+  assert.equal(restored.beatFx.depth, 0.65);
+  assert.equal(restored.songCount, 5);
+  assert.equal(restored.metronomeEnabled, true);
+  assert.equal(restored.bridgeDrawerOpen, true);
+  assert.equal(parsePlayerState("bad json", ["metropolis-machine"]), null);
+});
+
 test("later songs in a repeated queue entry shuffle clips while the first keeps authored order", () => {
   const scene = {
     clips: ["one", "two", "three", "four"].map((id) => ({ id })),
@@ -400,6 +612,31 @@ test("a loaded but never-started scene resolves to the first default-loop event"
   assert.equal(preview.eventId, "song-default-clip-1");
   assert.equal(preview.clipId, "clip-1");
   assert.match(preview.occurrenceKey, /^preview:/);
+});
+
+test("published Studio scenes show the highest occupied lane, then reveal the lower lane in time", () => {
+  const event = (id, lane, at, duration, z) => ({
+    id, lane, at: { beats: at }, duration: { beats: duration }, clipId: id,
+    source: { startSeconds: 0, loop: true, rate: 1 },
+    appearance: { z, opacity: 1, blendMode: "normal", fit: "cover", filters: [] },
+  });
+  const scene = {
+    lanePriority: "top", defaultLoopId: "default",
+    visualLoops: [{ id: "default", length: { bars: 2 }, events: [
+      event("lower", 1, 0, 8, 99),
+      event("upper", 0, 2, 2, 0),
+    ] }],
+  };
+  assert.deepEqual(resolve(scene, "default", 0).map((instance) => instance.eventId), ["lower"]);
+  assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["upper"]);
+  assert.deepEqual(resolve(scene, "default", 4).map((instance) => instance.eventId), ["lower"]);
+  assert.deepEqual(resolve(scene, "default", 10).map((instance) => instance.eventId), ["upper"]);
+  assert.equal(resolveVisualLoop(scene, "default", 0, { started: false })[0].eventId, "lower");
+  scene.visualLoops[0].compositing = "layers";
+  assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["lower", "upper"]);
+  delete scene.visualLoops[0].compositing;
+  delete scene.lanePriority;
+  assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["upper", "lower"]);
 });
 
 test("default playback holds Clip 1 instead of cycling clips", async () => {
@@ -569,6 +806,14 @@ test("Ken Burns motion pans toward a normalized subject without exposing an edge
     motionWithClipSubject({ ...motion, focusSource: "clip-subject" }, { x: 0.75, y: 0.2 }).end.focus,
     { x: 0.75, y: 0.2 },
   );
+  assert.equal(
+    kenBurnsFrame({ ...motion, speed: 2 }, 0.25).transform,
+    kenBurnsFrame(motion, 0.5).transform,
+  );
+  const deepZoom = kenBurnsFrame({ ...motion, end: { scale: 4, focus: { x: 0, y: 1 } } }, 1);
+  assert.equal(deepZoom.scale, 4);
+  assert.equal(deepZoom.translateXPercent, 150);
+  assert.equal(deepZoom.translateYPercent, -150);
 });
 
 test("approximately one third of authored cue loops carry subject-aware motion", () => {
