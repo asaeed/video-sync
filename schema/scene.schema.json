@@ -16,7 +16,7 @@
     "source": { "type": "string" },
     "sourcePage": { "type": "string" },
     "group": { "type": "string" },
-    "lanePriority": { "const": "top", "description": "When present, only the active event in the highest occupied lane is visible." },
+    "lanePriority": { "const": "top", "description": "When present, active events stack by lane, with lane 0 highest; opaque normal-blend events cover lower lanes." },
     "clips": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/clip" } },
     "visualLoops": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/visualLoop" } },
     "defaultLoopId": { "$ref": "#/$defs/id" },
@@ -88,7 +88,7 @@
         "name": { "type": "string", "minLength": 1 },
         "length": { "$ref": "#/$defs/musicalDuration" },
         "repeat": { "const": true },
-        "compositing": { "const": "layers" },
+        "compositing": { "const": "layers", "deprecated": true, "description": "Legacy property retained for saved-scene compatibility; lane stacking is always active." },
         "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/timelineEvent" } }
       }
     },
@@ -205,6 +205,12 @@
               "additionalProperties": false,
               "required": ["type"],
               "properties": { "type": { "const": "jump" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type"],
+              "properties": { "type": { "const": "auto" } }
             }
           ]
         },

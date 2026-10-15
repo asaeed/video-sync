@@ -13,6 +13,8 @@ import { musicalToBeats } from "./sequencer.mjs";
 import { parseDeckRuntime } from "./transport-state.mjs";
 import { parsePlayerState, serializePlayerState } from "./player-state.mjs";
 import { crossedHotCues, detectedLoopWrap } from "./cue-crossings.mjs";
+import { readSession, sessionBlob, SessionRecorder, SessionReplayer } from "./session-recorder.mjs";
+import { inputReadiness, sceneMediaPlan } from "./preflight.mjs";
 
 const channel = new BroadcastChannel("video-sync-poc-v4");
 const songCounter = new SongCounter(2);
@@ -154,8 +156,9 @@ function makeDeck(id, sceneId) {
   };
 }
 
+let replayScenes = null;
 function sceneById(id) {
-  return SCENES.find((scene) => scene.id === id) ?? SCENES[0];
+  return replayScenes?.get(id) ?? SCENES.find((scene) => scene.id === id) ?? SCENES[0];
 }
 
 let snapshot = {
@@ -169,6 +172,9 @@ let snapshot = {
     beatFx: { selected: "delay", enabled: false, target: "master", depth: 0.5, beatMultiplier: 1 },
   },
 };
+const sessionRecorder = new SessionRecorder();
+let sessionReplayer = null;
+let liveSnapshotBeforeReplay = null;
 
 let restoredPlayerState = null;
 try {
@@ -263,7 +269,7 @@ const engine = new VisualEngine(stage, (metrics) => {
     snapshot.decks.forEach((deck, index) => renderCueUi(deck, index + 1, sceneById(deck.sceneId)));
   }
   lastPhraseCycle = metrics.phraseActive ? metrics.phraseCycle : -1;
-});
+}, sceneById);
 
 const metronomeButton = document.querySelector("#metronome");
 const bpmInput = document.querySelector("#bpm");
@@ -304,11 +310,90 @@ function recomputeMix() {
 
 function broadcastSnapshot() {
   recomputeMix();
+  sessionRecorder.captureSnapshot(snapshot);
   engine.applySnapshot(snapshot);
   channel.postMessage({ type: "snapshot", snapshot });
   renderState();
   saveDeckRuntime();
 }
+
+function paintReplaySnapshot(next) {
+  snapshot = next;
+  engine.applySnapshot(snapshot);
+  channel.postMessage({ type: "snapshot", snapshot });
+  renderState();
+}
+
+function stopSessionReplay() {
+  if (!sessionReplayer) return;
+  sessionReplayer.stop();
+  sessionReplayer = null;
+  replayScenes = null;
+  engine.setSceneResolver(sceneById);
+  channel.postMessage({ type: "scene-overrides", scenes: null });
+  document.body.classList.remove("is-session-replaying");
+  renderPreflightInput();
+  document.querySelector("#session-stop").disabled = true;
+  document.querySelector("#session-record").disabled = false;
+  if (liveSnapshotBeforeReplay) {
+    snapshot = liveSnapshotBeforeReplay;
+    liveSnapshotBeforeReplay = null;
+    broadcastSnapshot();
+  }
+}
+
+const sessionRecordButton = document.querySelector("#session-record");
+const sessionStopButton = document.querySelector("#session-stop");
+const sessionFileInput = document.querySelector("#session-file");
+sessionRecordButton.addEventListener("click", () => {
+  if (sessionReplayer) return;
+  sessionRecorder.start(snapshot);
+  sessionRecordButton.classList.add("is-recording");
+  sessionRecordButton.textContent = "● Recording";
+  sessionRecordButton.disabled = true;
+  sessionStopButton.disabled = false;
+});
+sessionStopButton.addEventListener("click", async () => {
+  if (sessionReplayer) { stopSessionReplay(); return; }
+  const recording = sessionRecorder.stop(snapshot);
+  sessionRecordButton.classList.remove("is-recording");
+  sessionRecordButton.textContent = "● Record";
+  sessionRecordButton.disabled = false;
+  sessionStopButton.disabled = true;
+  if (!recording) return;
+  const usedSceneIds = new Set(recording.events.filter((event) => event.type === "snapshot")
+    .flatMap((event) => event.value.decks.filter((deck) => deck.loaded).map((deck) => deck.sceneId)));
+  recording.scenes = SCENES.filter((scene) => usedSceneIds.has(scene.id));
+  const { blob, extension } = await sessionBlob(recording);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `video-sync-session-${new Date(recording.startedAt).toISOString().replace(/[:.]/g, "-")}.${extension}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+});
+sessionFileInput.addEventListener("change", async () => {
+  const file = sessionFileInput.files?.[0];
+  sessionFileInput.value = "";
+  if (!file) return;
+  try {
+    const recording = await readSession(file);
+    if (sessionRecorder.session) sessionStopButton.click();
+    stopSessionReplay();
+    liveSnapshotBeforeReplay = structuredClone(snapshot);
+    replayScenes = new Map((recording.scenes ?? []).map((scene) => [scene.id, scene]));
+    engine.setSceneResolver(sceneById);
+    channel.postMessage({ type: "scene-overrides", scenes: [...replayScenes.values()] });
+    sessionReplayer = new SessionReplayer(recording, paintReplaySnapshot);
+    document.body.classList.add("is-session-replaying");
+    renderPreflightInput();
+    sessionRecordButton.disabled = true;
+    sessionStopButton.disabled = false;
+    sessionReplayer.start();
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Could not open recording");
+  }
+});
 
 function anyDeckPlaying() {
   return snapshot.decks.some((deck) => deck.playing);
@@ -507,11 +592,11 @@ function applyAutomaticCueCrossings(message) {
         );
       }
     }
-    // Let the normal cue router handle every visible Rekordbox cue. In
-    // particular, H intentionally has no fixed scene binding and resolves to
-    // the deck's generated random loop. Filtering to authored bindings here
-    // made that orange loop marker disappear during passive playback even
-    // though pressing H manually worked.
+    // Let the normal cue router handle every visible Rekordbox cue. Built-in
+    // scenes leave H unbound for a deck-local random loop; Studio publications
+    // can bind H explicitly. Filtering to authored bindings here made an
+    // unbound orange loop marker disappear during passive playback even though
+    // pressing that cue manually worked.
     const crossing = crossedHotCues(previous, current, { playing: deck.playing }).at(-1);
     if (!crossing) continue;
     triggerCue(deckNumber, crossing.cueIndex, {
@@ -647,6 +732,7 @@ function cueKind(binding, deck = null) {
   }
   if (observed?.kind === "cue") return "jump cue";
   if (binding.cue.type === "loop") return `${bars(binding.cue.length)}-bar audio loop`;
+  if (binding.cue.type === "auto") return "hot cue";
   return binding.cue.type === "random" ? "random fallback" : "jump cue";
 }
 
@@ -1026,6 +1112,9 @@ function renderState() {
   document.querySelector("#deck-1-mix-readout").textContent = `${left}%`;
   document.querySelector("#deck-2-mix-readout").textContent = `${right}%`;
   renderSceneQueue();
+  if (document.querySelector("#bridge-drawer").classList.contains("is-open") && preflightMediaKey() !== lastPreflightMediaKey) {
+    void refreshPreflightMedia();
+  }
 }
 
 document.querySelector("#scene-catalog-count").textContent = `${PLAYABLE_SCENES.length} playable now · ${SCENES.length - PLAYABLE_SCENES.length} authored scene contracts awaiting source media`;
@@ -1140,10 +1229,17 @@ document.querySelectorAll("[data-cue-deck]").forEach((button) => {
 });
 
 channel.addEventListener("message", ({ data }) => {
-  if (data?.type === "request-snapshot") broadcastSnapshot();
+  if (data?.type === "request-snapshot") {
+    if (sessionReplayer) {
+      channel.postMessage({ type: "scene-overrides", scenes: [...(replayScenes?.values() ?? [])] });
+      channel.postMessage({ type: "snapshot", snapshot });
+    }
+    else broadcastSnapshot();
+  }
 });
 
 window.addEventListener("keydown", (event) => {
+  if (sessionReplayer) return;
   if (event.target.matches("input, select")) return;
   if (event.key === "1") toggleDeck(1);
   if (event.key === "2") toggleDeck(2);
@@ -1165,6 +1261,72 @@ let lastContinuousRawFeedAt = 0;
 let lastContinuousMappedFeedAt = 0;
 let controllerTransportRelayAvailable = false;
 let rekordboxTempoAvailable = false;
+const preflightSignals = { rekordbox: 0, controller: 0, link: 0, midi: 0 };
+let mediaCheckRevision = 0;
+let lastPreflightMediaKey = "";
+
+function preflightMediaKey() {
+  return `${sessionReplayer ? "replay" : "live"}:${snapshot.decks.filter((deck) => deck.loaded).map((deck) => `${deck.id}:${deck.sceneId}`).join("|")}:${sceneQueue.next?.sceneId ?? "none"}`;
+}
+
+function renderPreflightInput() {
+  const readiness = inputReadiness({
+    replaying: Boolean(sessionReplayer),
+    bridgeState: lastBridgeStatus || "connecting",
+    signals: preflightSignals,
+  });
+  document.querySelector("#preflight-mode").textContent = readiness.mode;
+  document.querySelector("#preflight-input-detail").textContent = readiness.detail;
+  document.querySelector(".preflight-input").dataset.tone = readiness.tone;
+}
+
+function markPreflightSignal(kind) {
+  preflightSignals[kind] = Date.now();
+  renderPreflightInput();
+}
+
+async function refreshPreflightMedia() {
+  const revision = ++mediaCheckRevision;
+  lastPreflightMediaKey = preflightMediaKey();
+  const status = document.querySelector("#preflight-media-status");
+  const list = document.querySelector("#preflight-media-list");
+  const assignments = [
+    ...snapshot.decks.filter((deck) => deck.loaded).map((deck) => ({ label: `Deck ${deck.id}`, scene: sceneById(deck.sceneId) })),
+    { label: "Next load", scene: sceneById(sceneQueue.next?.sceneId) },
+  ];
+  const plans = assignments.map(({ label, scene }) => ({ label, scene, media: sceneMediaPlan(scene, window.location.href) }));
+  status.textContent = "Checking…";
+  status.classList.remove("is-warning");
+  list.replaceChildren();
+  const localUrls = [...new Set(plans.flatMap(({ media }) => media.localUrls))];
+  const checks = await Promise.all(localUrls.map(async (url) => {
+    try { return [url, (await fetch(url, { method: "HEAD", cache: "no-store" })).ok]; }
+    catch { return [url, false]; }
+  }));
+  if (revision !== mediaCheckRevision) return;
+  const available = new Map(checks);
+  let needsConnection = false;
+  let missingFiles = false;
+  for (const { label, scene, media } of plans) {
+    const missing = media.missingUrls.length + media.localUrls.filter((url) => !available.get(url)).length;
+    const remote = media.remoteUrls.length;
+    needsConnection ||= remote > 0;
+    missingFiles ||= missing > 0;
+    const row = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = `${label} · ${scene.name}`;
+    const state = document.createElement("strong");
+    state.textContent = missing ? `${missing} missing` : remote ? `${remote} online · ${media.localUrls.length} local` : `${media.localUrls.length} local · ready`;
+    state.classList.toggle("is-warning", Boolean(missing || remote));
+    row.append(name, state);
+    list.append(row);
+  }
+  status.textContent = missingFiles ? "Missing media" : needsConnection ? "Connection needed" : "Ready offline";
+  status.classList.toggle("is-warning", missingFiles || needsConnection);
+}
+
+document.querySelector("#preflight-refresh").addEventListener("click", () => void refreshPreflightMedia());
+window.setInterval(() => { if (bridgeDrawer.classList.contains("is-open")) renderPreflightInput(); }, 1000);
 
 function updateBridgeToggleLabel(open = bridgeDrawer.classList.contains("is-open")) {
   const action = open ? "Close" : "Open";
@@ -1180,7 +1342,11 @@ function setBridgeDrawerOpen(open) {
   document.body.classList.toggle("is-bridge-drawer-open", open);
   updateBridgeToggleLabel(open);
   saveDeckRuntime();
-  if (open) requestAnimationFrame(() => bridgeDrawerClose.focus());
+  if (open) {
+    renderPreflightInput();
+    void refreshPreflightMedia();
+    requestAnimationFrame(() => bridgeDrawerClose.focus());
+  }
   else bridgeDrawerToggle.focus();
 }
 
@@ -1287,7 +1453,9 @@ snapshot.decks.forEach((deck) => {
 });
 const bridgeSource = new EventSource(bridgeEventsUrl);
 bridgeSource.addEventListener("controller-transport", ({ data }) => {
+  if (sessionReplayer) return;
   const state = JSON.parse(data);
+  sessionRecorder.captureBridge({ type: "controller-transport", payload: state });
   controllerTransportRelayAvailable = true;
   for (const transport of transportEntriesForEvent(state)) {
     if (!transport.known || transport.deck > snapshot.decks.length) continue;
@@ -1307,6 +1475,7 @@ bridgeSource.addEventListener("bridge-status", ({ data }) => {
     lastBridgeStatus = status.state;
     updateBridgeToggleLabel();
   }
+  renderPreflightInput();
 });
 bridgeSource.addEventListener("rekordbox-adapter-status", ({ data }) => {
   const status = JSON.parse(data);
@@ -1316,8 +1485,11 @@ bridgeSource.addEventListener("rekordbox-adapter-status", ({ data }) => {
   target.title = status.detail ?? "Rekordbox deck-state adapter status updated.";
 });
 bridgeSource.addEventListener("bridge-message", ({ data }) => {
+  if (sessionReplayer) return;
   const message = JSON.parse(data);
+  sessionRecorder.captureBridge(message);
   if (message.type === "rekordbox.deck-state") {
+    markPreflightSignal("rekordbox");
     const plan = rekordboxTempoPlan(message, snapshot.decks, snapshot.opacities);
     rekordboxTempoAvailable = Boolean(plan);
     const target = document.querySelector("#bridge-rekordbox");
@@ -1354,6 +1526,7 @@ bridgeSource.addEventListener("bridge-message", ({ data }) => {
     return;
   }
   if (message.type === "link.clock") {
+    if (message.payload.peers > 0) markPreflightSignal("link");
     const peerLabel = `${message.payload.peers} peer${message.payload.peers === 1 ? "" : "s"}`;
     document.querySelector("#bridge-link").textContent = `${message.payload.tempo.toFixed(2)} BPM · ${peerLabel}`;
     const signature = `${message.payload.tempo.toFixed(2)}|${message.payload.peers}|${message.payload.playing}`;
@@ -1382,10 +1555,14 @@ bridgeSource.addEventListener("bridge-message", ({ data }) => {
     return;
   }
   if (message.type === "midi.raw") {
+    markPreflightSignal("midi");
     bridgeMidiCount += 1;
     document.querySelector("#bridge-midi").textContent = `${bridgeMidiCount} message${bridgeMidiCount === 1 ? "" : "s"}`;
   }
-  if (["controller.control", "rekordbox.control"].includes(message.type)) applyControllerMessage(message.payload);
+  if (["controller.control", "rekordbox.control"].includes(message.type)) {
+    markPreflightSignal("controller");
+    applyControllerMessage(message.payload);
+  }
   if (["midi.raw", "controller.control", "rekordbox.control", "bridge.ready", "bridge.self-test"].includes(message.type) && shouldAppendBridgeMessage(message)) {
     const kind = message.type === "midi.raw" ? "midi" : ["controller.control", "rekordbox.control"].includes(message.type) ? "control" : "system";
     appendBridgeEvent(bridgeEventLabel(message), kind, message.emittedAtUnixMs);
@@ -1400,9 +1577,11 @@ bridgeSource.addEventListener("error", () => {
   if (lastBridgeStatus !== "disconnected") appendBridgeEvent("status · disconnected", "error");
   lastBridgeStatus = "disconnected";
   updateBridgeToggleLabel();
+  renderPreflightInput();
 });
 
 window.addEventListener("pagehide", () => {
+  stopSessionReplay();
   savePlayerStateNow();
   metronome.stop();
   bridgeSource.close();

@@ -6,6 +6,8 @@
 
 All 28 playable scenes contain twelve independent, silent performance excerpts. Clips 9–12 were selected from source moments separate from the original eight and reviewed at three points per excerpt to remove title/dialogue cards. `--start=N` can rebuild only a newly added range, while `--cache-sources=PATH` caches a remote source outside the project when repeated HTTP range-seeks would be unreliable.
 
+The excerpts are all video files, but that does not guarantee perceptible motion. Run `node scripts/audit-scene-motion.mjs` from the project root to shortlist near-static cuts for visual review before recutting. On 2026-10-11, its 4-second threshold flagged 90 of 336 excerpts, especially *Woman in the Moon*, *The Lodger*, and *Underworld*. The detector is a heuristic for low frame change, not proof that a clip is a still; prefer an actual moving passage over adding synthetic pan/zoom when replacing one. Existing scene loop assignments are unchanged by the audit.
+
 | Scene | Source item | Local clips | Rights note |
 | --- | --- | ---: | --- |
 | Gumby Clay Trip | [Cartoon Craze: Gumby Gumbasia](https://archive.org/details/gumby-02) | 8 | Item does not state a license; selected for this private POC at the user's request. Verify before distribution. |

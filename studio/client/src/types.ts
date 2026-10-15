@@ -1,4 +1,4 @@
-export type Workspace = "clips" | "loops" | "cues";
+export type Workspace = "clips" | "loops";
 
 export type MusicalTime = {
   bars?: number;
@@ -74,6 +74,7 @@ export type VisualLoop = {
   name: string;
   length: MusicalTime;
   repeat: true;
+  /** Legacy saved-project field; lane stacking no longer depends on it. */
   compositing?: "layers";
   events: LoopEvent[];
 };
@@ -100,7 +101,8 @@ export type SceneProject = {
   clips: SourceClip[];
   visualLoops: VisualLoop[];
   defaultLoopId: string;
-  cueBindings: CueBinding[];
+  /** Legacy saved-project mappings; current cue assignments follow visualLoops order. */
+  cueBindings?: CueBinding[];
   randomLoop?: RuntimeScene["randomLoop"];
   advance?: RuntimeScene["advance"];
 };
@@ -129,6 +131,7 @@ export type RuntimeScene = {
     name: string;
     length: MusicalTime;
     repeat: true;
+    /** Legacy published-scene field; lane stacking no longer depends on it. */
     compositing?: "layers";
     events: Array<{
       id: string;
@@ -148,7 +151,7 @@ export type RuntimeScene = {
   defaultLoopId: string;
   cueBindings: Array<{
     input: CueBinding["input"];
-    cue: { type: "jump" } | { type: "loop"; length: MusicalTime };
+    cue: { type: "auto" | "jump" } | { type: "loop"; length: MusicalTime };
     visual: { loopId: string; retrigger: "cue-trigger" | "audio-loop-cycle" };
   }>;
   randomLoop: {

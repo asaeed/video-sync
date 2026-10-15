@@ -187,10 +187,32 @@ function browserPublishedScene() {
 }
 
 const catalogScenes = SCENE_CATALOG.map((definition) => buildScene(definition));
-const publishedScene = browserPublishedScene();
-export const SCENES = publishedScene
-  ? [publishedScene, ...catalogScenes.filter((scene) => scene.id !== publishedScene.id)]
-  : catalogScenes;
+async function serverPublishedScenes() {
+  if (typeof window === "undefined") return [];
+  try {
+    const response = await fetch("/api/studio/published", { cache: "no-store" });
+    if (!response.ok) return [];
+    const scenes = await response.json();
+    return Array.isArray(scenes) ? scenes.filter((scene) => scene?.schemaVersion === 4 && scene?.availability === "ready"
+      && Array.isArray(scene.clips) && Array.isArray(scene.visualLoops)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function mergePublishedScenes(catalog, published, localPublished = null) {
+  const overrides = new Map(published.map((scene) => [scene.id, scene]));
+  // Keep the old single-scene browser override available for offline use and
+  // existing sessions, but never let it replace a newer server publication.
+  if (localPublished && !overrides.has(localPublished.id)) overrides.set(localPublished.id, localPublished);
+  const sceneIds = new Set(catalog.map((scene) => scene.id));
+  return [
+    ...catalog.map((scene) => overrides.get(scene.id) ?? scene),
+    ...[...overrides.values()].filter((scene) => !sceneIds.has(scene.id)),
+  ];
+}
+
+export const SCENES = mergePublishedScenes(catalogScenes, await serverPublishedScenes(), browserPublishedScene());
 export const PLAYABLE_SCENES = SCENES.filter((scene) => scene.availability === "ready");
 
 export function sceneById(id) {

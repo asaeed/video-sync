@@ -11,8 +11,10 @@ Video Sync turns DJ performance data into edited video sequences on a separate p
 Video Sync is not tied to the GRV6. Controller-specific MIDI messages are translated through a configurable profile into shared transport, cue, mixer, and effect events. Any controller whose MIDI can be observed alongside Rekordbox can be supported with an appropriate mapping; each device still needs live coexistence and control validation.
 
 <p align="center">
-  <img src="docs/images/emulator.png" alt="Video Sync emulator showing the two-deck video mixer, 16-bar phrase display, scene sequencer, deck controls, Hot Cue mappings, and Beat FX controls">
+  <img src="docs/images/emulator.png" alt="Video Sync Live Console showing Metropolis playing on Deck 1, Gumby loaded on Deck 2, scene queue, 16-bar display, visual mixer, recording controls, and Beat FX">
 </p>
+
+The screenshot shows a local library that includes published scenes alongside the 28 playable built-in catalog entries.
 
 ## What works now
 
@@ -26,6 +28,7 @@ Video Sync is not tied to the GRV6. Controller-specific MIDI messages are transl
 - Per-appearance source in-points, filters, and subject-aware slow pan/zoom motion.
 - A 16-bar phrase display, optional metronome, manual downbeat correction, compact live controls, and a separate projector window.
 - An ordered scene queue with per-entry song counts and shuffled variation on repeated scenes.
+- A performance-session recorder for controller/bridge evidence and resolved visual state; replay needs no controller or Rekordbox connection (video only, not DJ audio).
 - 36 scene contracts, including 28 locally playable film scenes when their source media has been generated.
 
 ## How it fits together
@@ -60,18 +63,23 @@ The latency-sensitive input path is deliberately narrow. A small native bridge o
 ```sh
 git clone https://github.com/asaeed/video-sync.git
 cd video-sync
+npm ci
 npm test
 npm run bridge:build
+npm run studio:build
 npm run dev
 ```
 
 Open <http://127.0.0.1:4316/>. The interface also works as a controller emulator when no DJ hardware is attached.
 
+Use **Record** in the Live Console before playing, then **Stop** to download a compressed `.json.gz` session. **Replay…** opens that file and drives the same visual engine and projector output offline. It includes the used scene definitions but references local video media rather than embedding it; keep the source clips available on the replay computer. Replay suspends live controls until **Stop** is pressed.
+
+The current recorder buffers session data in the browser until Stop; test memory use before relying on multi-hour sets. It captures raw and normalized bridge messages for diagnosis, while replay follows the resolved visual snapshots so scene choices do not depend on a connected controller.
+
 Additional development views:
 
 - [Scene Studio authoring](http://127.0.0.1:4316/studio/)
 - [Scene schema and input map](http://127.0.0.1:4316/studio/schema/)
-- [Interface direction studies](http://127.0.0.1:4316/studio/visual-directions/)
 
 ## Add local video media
 
@@ -115,9 +123,13 @@ See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event c
 - A **timeline event** can select an in-point, playback rate, layer, opacity, filter, blend mode, and pan/zoom motion without modifying the source clip.
 - A **set** is an ordered queue of scenes, with each entry lasting for a configured number of song loads.
 
-Clip 1 is the predictable default visual for normal playback. Authored Hot Cues A-G select deterministic loops; Hot Cue H uses a stable random two-clip loop generated when the deck is loaded.
+In the built-in film catalog, Clip 1 is the predictable default visual, Hot Cues A-G select authored loops, and H uses a stable random two-clip loop generated when the deck is loaded. In Scene Studio, the first eight loops in the authoring list map directly to A-H in order; the starred default is independent of that order, and an unassigned cue uses the scene default.
 
 The editable authoring contract is documented in [Scene Studio](docs/12-scene-studio.md) and validated by [schema/scene-project.schema.json](schema/scene-project.schema.json). Publish compiles it into the runtime contract documented in [docs/07-scene-schema.md](docs/07-scene-schema.md) and validated by [schema/scene.schema.json](schema/scene.schema.json).
+
+Scene Studio's 16:9 Loop Builder preview uses the Live Console video engine and reflects each instance's **Full frame** or **Fill screen (crop)** setting. **Files → Export scene** downloads one `.vscene` package containing the current editable scene, compiled runtime scene, and unchanged local MP4 sources. **Files → Import scene** restores them under a new ID if the original already exists. Export requires every source to be local; imported scenes can be edited and then published to Live Console.
+
+Before a set, open the Live Console's **Bridge** drawer for the performance preflight. It distinguishes live Rekordbox/controller input, Link-only tempo, manual/emulator control, and session replay; flags stale DJ signals; and checks local media for loaded decks and the next queued scene. Remote video is marked as connection-dependent. **Recheck media** refreshes those checks without changing playback or the scene queue.
 
 ## Platform status
 
@@ -129,7 +141,7 @@ The editable authoring contract is documented in [Scene Studio](docs/12-scene-st
 | Ableton Link observer | Working; optional for the current macOS deck-state path |
 | Windows | C++ bridge is designed to build cross-platform; Rekordbox deck-state integration is still needed |
 | Video output | 1080p target; sustained projector latency and load testing remain to be measured |
-| Authoring | Scene Studio vertical slice: source-range cutting, reusable clips, loop timeline, cue map, local save, and runtime publish |
+| Authoring | Browser-based Scene Studio with source-range cutting, reusable clips, ordered loops mapped to A–H, shared Live preview, local save, runtime publish, and single-scene packages |
 
 ## Repository layout
 
@@ -147,9 +159,8 @@ The editable authoring contract is documented in [Scene Studio](docs/12-scene-st
 
 - Measure end-to-end controller, decode, render, and projector latency under performance load.
 - Add a cross-platform source of authoritative Rekordbox track loads and deck state.
-- Converge Scene Studio preview and Live Console on one shared renderer component.
 - Add agent-assisted clip selection, loop editing, and scene iteration outside the live runtime.
-- Package media and scene dependencies into portable performance sets.
+- Extend single-scene packages into portable multi-scene performance sets.
 
 ## Documentation
 
@@ -166,6 +177,7 @@ The editable authoring contract is documented in [Scene Studio](docs/12-scene-st
 - [Scene catalog and sequencer](docs/10-scene-catalog-and-sequencer.md)
 - [Rekordbox deck-state v2](docs/11-deck-state-v2.md)
 - [Scene Studio](docs/12-scene-studio.md)
+- [Current project context](docs/project-context.md)
 
 ## Licensing
 

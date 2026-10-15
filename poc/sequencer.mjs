@@ -12,10 +12,11 @@ export function resolveVisualLoop(scene, activeLoopId, beat, options = {}) {
 
   const generation = options.loopGeneration ?? 0;
   if (!options.started) {
-    const firstEvent = [...visualLoop.events]
-      .sort((left, right) => musicalToBeats(left.at) - musicalToBeats(right.at)
-        || (scene.lanePriority === "top" ? (left.lane ?? 0) - (right.lane ?? 0) : 0))[0];
-    return firstEvent ? [toInstance(visualLoop, firstEvent, `preview:${generation}:${firstEvent.id}`, 0, 0)] : [];
+    const firstAt = Math.min(...visualLoop.events.map((event) => musicalToBeats(event.at)));
+    const previews = visualLoop.events
+      .filter((event) => musicalToBeats(event.at) === firstAt)
+      .map((event) => toInstance(visualLoop, event, `preview:${generation}:${event.id}`, 0, 0));
+    return compositeLanes(scene, visualLoop, previews);
   }
 
   const lengthBeats = musicalToBeats(visualLoop.length);
@@ -32,12 +33,20 @@ export function resolveVisualLoop(scene, activeLoopId, beat, options = {}) {
     const progress = Math.min(1, Math.max(0, elapsed / durationBeats));
     return [toInstance(visualLoop, event, `${generation}:${occurrence}:${event.id}`, progress, loopBeat / lengthBeats, elapsed)];
   });
-  if (scene.lanePriority === "top" && active.length) {
-    if (visualLoop.compositing === "layers") return active.sort((left, right) => right.lane - left.lane);
-    const topLane = Math.min(...active.map((instance) => instance.lane));
-    return active.filter((instance) => instance.lane === topLane).slice(0, 1);
+  return compositeLanes(scene, visualLoop, active);
+}
+
+function compositeLanes(scene, visualLoop, active) {
+  if (scene.lanePriority !== "top") return active.sort((left, right) => left.z - right.z);
+  const maxLane = Math.max(0, ...visualLoop.events.map((event) => event.lane ?? 0));
+  const stack = active.sort((left, right) => left.lane - right.lane || right.z - left.z);
+  const visible = [];
+  for (const instance of stack) {
+    if (instance.opacity <= 0) continue;
+    visible.push({ ...instance, z: maxLane - instance.lane + 1 });
+    if (instance.opacity >= 1 && instance.blendMode === "normal") break;
   }
-  return active.sort((left, right) => left.z - right.z);
+  return visible.reverse();
 }
 
 function appearanceOpacity(event, progress) {

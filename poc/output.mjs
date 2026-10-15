@@ -1,4 +1,5 @@
 import { VisualEngine } from "./engine.mjs";
+import { sceneById } from "./scene-registry.mjs";
 
 const channel = new BroadcastChannel("video-sync-poc-v4");
 const stage = document.querySelector("#output-stage");
@@ -7,8 +8,13 @@ const engine = new VisualEngine(stage, (metrics) => {
   const phrase = metrics.phraseActive ? `${metrics.phraseBar}/16` : "stopped";
   diagnostics.textContent = `Phrase ${phrase}  ·  frame p95 ${metrics.frameIntervalMs.toFixed(1)} ms  ·  active ${metrics.activeVideos}  ·  drops ${metrics.droppedFrames}`;
 });
+let recordedScenes = null;
 
 channel.addEventListener("message", ({ data }) => {
+  if (data?.type === "scene-overrides") {
+    recordedScenes = data.scenes ? new Map(data.scenes.map((scene) => [scene.id, scene])) : null;
+    engine.setSceneResolver((id) => recordedScenes?.get(id) ?? sceneById(id));
+  }
   if (data?.type === "snapshot") engine.applySnapshot(data.snapshot);
 });
 

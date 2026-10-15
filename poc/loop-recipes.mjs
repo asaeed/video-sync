@@ -95,7 +95,7 @@ export function compileTwoClipLoop(config) {
   }
   const totalBeats = beats(config.length);
   if (!(totalBeats > 0)) throw new Error(`${config.id}: loop length must be positive`);
-  const normalized = { ...config, fit: config.fit ?? "cover" };
+  const normalized = { ...config, fit: config.fit ?? "contain" };
   let events;
   if (config.type === "sequence") events = splitEvents(normalized, totalBeats);
   if (config.type === "call-response") events = splitEvents(normalized, totalBeats, true);

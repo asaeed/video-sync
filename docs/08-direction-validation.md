@@ -1,6 +1,8 @@
-# Direction validation: scenes, visual loops, cues, and the bridge
+# Direction validation: scenes, visual loops, cues, and the bridge (historical)
 
 Date: 2026-09-03
+
+> This records early design tradeoffs and bridge assumptions. The implemented browser Live Console and Scene Studio have superseded several UI proposals below; use [project context](project-context.md) and [architecture](03-architecture.md) for current behavior. The visual-directions demo referenced in this record has been archived, not shipped as a current app view.
 
 ## Verdict
 

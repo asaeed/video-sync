@@ -31,8 +31,9 @@ function seekVideo(video, source, elapsedBeats, bpm, token) {
 }
 
 class DeckRuntime {
-  constructor(deckNumber, stage) {
+  constructor(deckNumber, stage, sceneResolver = sceneById) {
     this.deckNumber = deckNumber;
+    this.sceneResolver = sceneResolver;
     this.container = document.createElement("div");
     this.container.className = `deck-visual-layer deck-visual-${deckNumber}`;
     this.container.dataset.deckVisual = String(deckNumber);
@@ -76,6 +77,8 @@ class DeckRuntime {
     if (this.scene?.id !== this.state.sceneId || this.loadedGeneration !== this.state.generation) {
       await this.loadScene(this.state.sceneId, this.state.generation);
     } else {
+      const currentScene = this.sceneResolver(this.state.sceneId);
+      if (currentScene !== this.scene) this.refreshScene(currentScene);
       // Transport and cue changes should paint immediately instead of waiting for
       // the next animation frame, which may be throttled in a background window.
       this.render(nowEpochMs());
@@ -85,7 +88,7 @@ class DeckRuntime {
 
   async loadScene(sceneId, generation) {
     const token = ++this.loadToken;
-    this.scene = sceneById(sceneId);
+    this.scene = this.sceneResolver(sceneId);
     this.state.clipOrder = normalizeClipOrder(this.scene, this.state.clipOrder);
     this.runtimeScene = this.state.randomLoop
       ? { ...this.scene, visualLoops: [...this.scene.visualLoops, this.state.randomLoop] }
@@ -104,6 +107,7 @@ class DeckRuntime {
         video.dataset.nodeKey = key;
         video.dataset.eventId = event.id;
         video.dataset.clipId = clip.id;
+        video.dataset.eventTiming = JSON.stringify([event.at, event.duration, event.source, clip.startSeconds]);
         video.dataset.subjectFocusX = String(clip.subjectFocus?.x ?? 0.5);
         video.dataset.subjectFocusY = String(clip.subjectFocus?.y ?? 0.44);
         this.eventNodes.set(key, video);
@@ -118,6 +122,44 @@ class DeckRuntime {
     if (token !== this.loadToken) return;
     this.render(nowEpochMs());
     this.setTransport(this.state.playing);
+  }
+
+  // Studio replaces its scene object on edits. Keep unaffected media elements
+  // decoding instead of rebuilding the whole preview on every keystroke.
+  refreshScene(scene) {
+    const previousNodes = this.eventNodes;
+    const nextNodes = new Map();
+    this.scene = scene;
+    this.state.clipOrder = normalizeClipOrder(scene, this.state.clipOrder);
+    this.runtimeScene = this.state.randomLoop
+      ? { ...scene, visualLoops: [...scene.visualLoops, this.state.randomLoop] }
+      : scene;
+    for (const visualLoop of this.runtimeScene.visualLoops) {
+      for (const event of visualLoop.events) {
+        const mappedClipId = remapSceneClipId(scene, this.state.clipOrder, event.clipId);
+        const clip = scene.clips.find((candidate) => candidate.id === mappedClipId);
+        if (!clip) continue;
+        const key = `${visualLoop.id}:${event.id}`;
+        const prior = previousNodes.get(key);
+        const reusable = prior?.dataset.clipId === clip.id && prior.getAttribute("src") === clip.src;
+        const video = reusable ? prior : createVideo(clip.src, "visual-video visual-loop-event", (endedVideo) => this.restartInPointLoop(endedVideo));
+        if (prior && !reusable) { prior.pause(); prior.remove(); }
+        if (!reusable) this.container.insertBefore(video, this.effectOverlay);
+        const timing = JSON.stringify([event.at, event.duration, event.source, clip.startSeconds]);
+        if (video.dataset.eventTiming !== timing) delete video.dataset.occurrenceKey;
+        video.dataset.eventTiming = timing;
+        video.dataset.nodeKey = key;
+        video.dataset.eventId = event.id;
+        video.dataset.clipId = clip.id;
+        video.dataset.subjectFocusX = String(clip.subjectFocus?.x ?? 0.5);
+        video.dataset.subjectFocusY = String(clip.subjectFocus?.y ?? 0.44);
+        nextNodes.set(key, video);
+      }
+    }
+    for (const [key, video] of previousNodes) {
+      if (nextNodes.get(key) !== video) { video.pause(); video.remove(); }
+    }
+    this.eventNodes = nextNodes;
   }
 
   restartInPointLoop(video) {
@@ -142,7 +184,7 @@ class DeckRuntime {
   }
 
   render(epochMs) {
-    if (!this.state.loaded || !this.scene) return { active: 0, dropped: 0 };
+    if (!this.state.loaded || !this.scene) return { active: 0, dropped: 0, mediaPending: false };
     const beat = beatAt(this.state.clock, epochMs);
     const instances = resolveVisualLoop(this.runtimeScene, this.state.activeLoopId, beat, {
       started: this.state.started,
@@ -174,10 +216,11 @@ class DeckRuntime {
     this.applyBeatFx(beatAt(this.state.linkClock, epochMs), visibleNodes);
 
     const activeNodes = [...visibleNodes];
+    const mediaPending = activeNodes.length > 0 && activeNodes.every((video) => !video.error && (video.seeking || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA));
     const dropped = activeNodes.reduce((total, video) => {
       return total + (video.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0);
     }, 0);
-    return { active: activeNodes.length, dropped, beat };
+    return { active: activeNodes.length, dropped, mediaPending, beat };
   }
 
   showInstance(instance, wasVisible = false) {
@@ -243,7 +286,8 @@ class DeckRuntime {
 }
 
 export class VisualEngine {
-  constructor(stage, onMetrics = () => {}) {
+  /** @param {(metrics: { mediaPending: boolean }) => void} onMetrics */
+  constructor(stage, onMetrics = () => {}, sceneResolver = sceneById) {
     this.stage = stage;
     this.onMetrics = onMetrics;
     this.linkClock = { bpm: 100, playing: true, anchorBeat: 0, anchorEpochMs: nowEpochMs() };
@@ -251,7 +295,7 @@ export class VisualEngine {
     this.frameTimes = [];
     this.lastFrameAt = 0;
     this.running = true;
-    this.decks = [new DeckRuntime(1, stage), new DeckRuntime(2, stage)];
+    this.decks = [new DeckRuntime(1, stage, sceneResolver), new DeckRuntime(2, stage, sceneResolver)];
     requestAnimationFrame((timestamp) => this.tick(timestamp));
   }
 
@@ -270,6 +314,13 @@ export class VisualEngine {
         },
       });
     });
+  }
+
+  setSceneResolver(resolver) {
+    for (const deck of this.decks) {
+      deck.sceneResolver = resolver;
+      deck.loadedGeneration = -1;
+    }
   }
 
   tick(timestamp) {
@@ -291,6 +342,7 @@ export class VisualEngine {
       frameIntervalMs: this.percentile(this.frameTimes, 0.95),
       droppedFrames: deckMetrics.reduce((total, deck) => total + deck.dropped, 0),
       activeVideos: deckMetrics.reduce((total, deck) => total + deck.active, 0),
+      mediaPending: deckMetrics.some((deck) => deck.mediaPending),
     });
     requestAnimationFrame((nextTimestamp) => this.tick(nextTimestamp));
   }
@@ -299,5 +351,14 @@ export class VisualEngine {
     if (!values.length) return 0;
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * percentile))];
+  }
+
+  destroy() {
+    this.running = false;
+    for (const deck of this.decks) {
+      deck.loadToken += 1;
+      for (const video of deck.videos()) video.pause();
+      deck.container.remove();
+    }
   }
 }

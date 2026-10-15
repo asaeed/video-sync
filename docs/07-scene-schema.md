@@ -64,7 +64,7 @@ The POC uses one optimized MP4 per numbered clip. `clip.startSeconds` is its def
         "z": 0,
         "opacity": 1,
         "blendMode": "normal",
-        "fit": "cover",
+        "fit": "contain",
         "filters": [],
         "motion": {
           "type": "ken-burns",
@@ -82,11 +82,11 @@ The POC uses one optimized MP4 per numbered clip. `clip.startSeconds` is its def
 
 `at` and `duration` are musical positions. In 4/4, one bar is four beats and a 1/16 note is `0.25` beats. Events may overlap; `z` controls their order. An empty filter array means raw video.
 
-Studio-published scenes additionally set `lanePriority: "top"` on the scene and an integer `lane` on every timeline event. In those scenes, only the active event in the highest occupied lane (lowest lane number) is displayed; a lower event continues to be timed against the beat clock while hidden, so it resumes at its correct media position when uncovered. The older built-in scene catalog omits `lanePriority` and retains its `z`-based overlay behavior.
+Studio-published scenes additionally set `lanePriority: "top"` on the scene and an integer `lane` on every timeline event. The lowest lane number is visually highest. An opaque, normal-blend event covers lower lanes; reducing opacity or selecting another blend mode reveals them. Fully covered videos are not decoded until needed, but remain timed against the beat clock so they resume at the correct media position. The older built-in scene catalog omits `lanePriority` and retains its `z`-based overlay behavior. A legacy `compositing: "layers"` property may still appear in saved scenes, but the lane stack no longer depends on it.
 
 `appearance.motion` is optional and belongs to this occurrence of the clip, not the clip file. A Ken Burns motion interpolates between two scale/focus keyframes. Focus coordinates are normalized across the frame: `{ "x": 0, "y": 0 }` is top-left and `{ "x": 1, "y": 1 }` is bottom-right. `focusSource: "clip-subject"` lets a repeated scene use the focus point belonging to the actual shuffled clip; omit it to keep the keyframes' explicit coordinates. `progress: "loop"` makes the move span the whole musical loop even if that clip appears in several alternating events; `"event"` restarts it for each event. Optional `speed` multiplies that progress (`1` is the authored duration, `2` reaches the target halfway through, and `0.5` gets halfway there before the event repeats). The renderer clamps pan to the zoom overscan so no empty edge is exposed.
 
-For the current playable catalog, subject points were suggested offline from representative frames using face detection followed by attention saliency. This analysis never runs in the player. An authoring UI should show the suggested point over the frame, allow drag-to-correct, and fall back to a restrained centered zoom when confidence is weak or the subject moves significantly.
+For the current playable catalog, subject points were suggested offline from representative frames using face detection followed by attention saliency. This analysis never runs in the player. Scene Studio shows the pan/zoom target over the loop preview and lets the author drag it; weak or moving subjects still need visual review and a restrained fallback.
 
 `source.startSeconds` is a timestamp inside the media file. With `source.loop: true`, the video repeats from that in-point if the event lasts longer than the remaining media. Each time the timeline event re-enters the visual loop, the renderer also seeks back to `startSeconds` before continuing.
 
@@ -126,7 +126,7 @@ Each scene also declares the clips, lengths, and two-clip recipes its random loo
 }
 ```
 
-The browser materializes this configuration into a normal event timeline once when a deck is loaded. It randomly chooses two different clips, one recipe, one loop length, recipe timing, and a half-second-quantized source in-point. That generated loop stays stable for the life of the deck load and is serialized across a page reload. Loading the deck again generates a new one. Any unassigned Hot Cue selects this deck-local random loop; with the current A–G authored mappings, Hot Cue H is random.
+The browser materializes this configuration into a normal event timeline once when a deck is loaded. It randomly chooses two different clips, one recipe, one loop length, recipe timing, and a half-second-quantized source in-point. That generated loop stays stable for the life of the deck load and is serialized across a page reload. Loading the deck again generates a new one. In the built-in catalog, A–G are authored and unassigned H selects this deck-local random loop. Scene Studio instead maps its first eight ordered loops to A–H, with any missing slots mapped to the scene default; those published mappings take precedence over the random fallback.
 
 ## Cue bindings
 
@@ -145,7 +145,7 @@ Every configured cue selects a visual loop. A scene does not need to bind every 
 }
 ```
 
-The selected visual loop remains active. In the POC, its length matches the modeled audio-loop length, so its normal repeat boundary restarts its first event. A production bridge should re-anchor at a real audio-loop reset only if Rekordbox MIDI exposes a stable reset/state message.
+The selected visual loop remains active and repeats at its authored boundary. When visible Rekordbox metadata exposes audio-loop bounds, the macOS deck-state path can identify a playhead wrap and re-anchor the visual loop at the interpolated wrap time. Otherwise the visual repeats on its authored timing; a controller MIDI reset message is not required for the observed-wrap path.
 
 ### Audio jump cue
 

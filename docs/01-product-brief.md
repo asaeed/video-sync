@@ -1,5 +1,7 @@
 # Product brief
 
+> Product target, not a claim that every item below is performance-qualified today. See [project context](project-context.md) for the implemented boundary.
+
 ## Outcome
 
 Create cohesive, mostly pre-edited video visuals that run beside Rekordbox on the same Mac or Windows computer, stay aligned to musical time, and require very little attention during a DJ set.
@@ -28,22 +30,22 @@ The app should feel like preparing a visual set, not operating a full VJ worksta
 1. Import, generate, or edit video clips.
 2. Assemble numbered clips into one or more visual-loop timelines with optional per-event filters.
 3. Preview the scene against a simulated BPM and beat grid using the same renderer as the player.
-4. Put scenes in a deliberate queue and choose an automatic advance count per scene.
-5. Configure a stable hot-cue action order for that scene.
-6. Validate and pre-cache all media before show mode.
+4. Order visual loops for Hot Cues A–H and choose an independent scene default.
+5. In Live Console, put scenes in a queue and choose how many song loads each entry covers.
+6. Prepare and validate local media before show mode.
 
 Example three-clip scene:
 
 - Make Clip 1 the repeating default visual loop for normal playback.
 - Map looping audio Hot Cue A to a four-bar visual loop containing Clip 2.
 - Map looping audio Hot Cue B to a two-bar visual loop containing Clip 3.
-- Leave later Hot Cue slots unavailable until another clip or authored loop is added; never make the default state cycle through otherwise cue-selected clips.
+- Let later Hot Cue slots fall back to the scene default until another loop is added; never make the default state cycle through otherwise cue-selected clips.
 - Advance to the next scene after two newly played tracks.
 
 ### During the set: Player
 
 1. Open a prepared set and select the projector.
-2. Confirm Link clock, Rekordbox bridge, loaded scene, and next scene.
+2. Confirm Rekordbox/controller input, optional Link, loaded media, and the next queued scene.
 3. Put the output window on the projector and enter full screen.
 4. Start automatic mode and return attention to Rekordbox.
 5. Retain only essential live controls: freeze, previous/next scene, intensity, and resync.
@@ -54,7 +56,7 @@ The bridge and viewer may be separate processes for stability, but they should l
 
 - **Set and forget:** automatic operation is the default; intervention is an escape hatch.
 - **Musical time first:** rules use beats, bars, and phrases, not milliseconds.
-- **Edited-video first:** effects and generative shaders may come later.
+- **Edited-video first:** raw footage is the default; the POC already has optional Beat FX visual analogs, while broader shader work remains deferred.
 - **Reusable scenes:** scene rules must not depend on one track’s phrase map.
 - **Bounded runtime:** protect Rekordbox with predictable CPU, GPU, memory, and disk work.
 - **Graceful degradation:** if cues disappear, continue the current scene on the last trustworthy clock.
@@ -73,12 +75,12 @@ Included:
 - scene queue with manual and after-N-songs advance;
 - beat/bar scheduling down to 1/16-note duration;
 - consistent scene-level hot-cue action order;
-- read-only Ableton Link clock plus confirmed, passive DDJ-GRV6 MIDI input mappings;
+- visible Rekordbox deck-state input on supported platforms, passive controller MIDI mappings, and optional read-only Ableton Link;
 - focused Studio and Player modes.
 
 Deferred:
 
-- Rekordbox effect mirroring;
+- broader Rekordbox effect families beyond the POC's Beat FX mappings;
 - 4K qualification;
 - projection mapping, multi-projector output, NDI, Syphon/Spout, DMX, cameras, or streaming;
 - broad plugin/shader workstations;

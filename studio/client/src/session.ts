@@ -10,6 +10,8 @@ export type StudioDraft = {
   selectedClipId: string | null;
   selectedLoopId: string;
   selectedEventId: string | null;
+  sourcePlayheads?: Record<string, number>;
+  loopPreviewBeat?: number;
 };
 
 export type StudioSession = {
@@ -17,6 +19,8 @@ export type StudioSession = {
   activeSceneId: string;
   workspace: Workspace;
   drafts: Record<string, StudioDraft>;
+  settings?: { sourceMuted: boolean; auditionLoop: boolean };
+  prepared?: { projectId: string; signature: string; media: Record<string, { file: string; durationSeconds: number }> };
 };
 
 export function readStudioSession(): StudioSession | null {
@@ -31,8 +35,16 @@ export function readStudioSession(): StudioSession | null {
       drafts[id] = draft;
     }
     if (!drafts[value.activeSceneId]) return null;
-    const workspace: Workspace = ["clips", "loops", "cues"].includes(value.workspace) ? value.workspace : "clips";
-    return { v: 1, activeSceneId: value.activeSceneId, workspace, drafts };
+    const workspace: Workspace = value.workspace === "cues" || value.workspace === "loops" ? "loops" : "clips";
+    const settings = value.settings && typeof value.settings.sourceMuted === "boolean" && typeof value.settings.auditionLoop === "boolean"
+      ? { sourceMuted: value.settings.sourceMuted, auditionLoop: value.settings.auditionLoop }
+      : undefined;
+    const prepared = value.prepared;
+    return { v: 1, activeSceneId: value.activeSceneId, workspace, drafts,
+      ...(settings ? { settings } : {}),
+      ...(prepared && typeof prepared.projectId === "string" && typeof prepared.signature === "string" && prepared.media && typeof prepared.media === "object"
+        ? { prepared } : {}),
+    };
   } catch {
     return null;
   }

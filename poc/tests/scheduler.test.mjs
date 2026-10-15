@@ -614,7 +614,7 @@ test("a loaded but never-started scene resolves to the first default-loop event"
   assert.match(preview.occurrenceKey, /^preview:/);
 });
 
-test("published Studio scenes show the highest occupied lane, then reveal the lower lane in time", () => {
+test("published Studio scenes stack lanes and decode lower videos only when blending needs them", () => {
   const event = (id, lane, at, duration, z) => ({
     id, lane, at: { beats: at }, duration: { beats: duration }, clipId: id,
     source: { startSeconds: 0, loop: true, rate: 1 },
@@ -632,7 +632,16 @@ test("published Studio scenes show the highest occupied lane, then reveal the lo
   assert.deepEqual(resolve(scene, "default", 4).map((instance) => instance.eventId), ["lower"]);
   assert.deepEqual(resolve(scene, "default", 10).map((instance) => instance.eventId), ["upper"]);
   assert.equal(resolveVisualLoop(scene, "default", 0, { started: false })[0].eventId, "lower");
+  scene.visualLoops[0].events[1].appearance.opacity = 0.5;
+  const blended = resolve(scene, "default", 2);
+  assert.deepEqual(blended.map((instance) => instance.eventId), ["lower", "upper"]);
+  assert.ok(blended[1].z > blended[0].z);
+  assert.equal(blended[1].opacity, 0.5);
   scene.visualLoops[0].compositing = "layers";
+  assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["lower", "upper"]);
+  scene.visualLoops[0].events[1].appearance.opacity = 1;
+  assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["upper"]);
+  scene.visualLoops[0].events[1].appearance.blendMode = "screen";
   assert.deepEqual(resolve(scene, "default", 2).map((instance) => instance.eventId), ["lower", "upper"]);
   delete scene.visualLoops[0].compositing;
   delete scene.lanePriority;

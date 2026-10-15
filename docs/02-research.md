@@ -1,6 +1,6 @@
 # Research: existing tools and Rekordbox integration
 
-Research updated through 2026-09-03.
+Research snapshot updated through 2026-09-03. Product comparisons, prices, licensing, and external capabilities may have changed; verify primary sources before relying on them. The integration hierarchy below reflects the current local implementation, not the original Link-first proposal.
 
 ## Bottom line
 
@@ -23,7 +23,7 @@ The closest built-in option is Rekordbox Video. The closest general VJ option is
 
 There is no documented public Rekordbox WebSocket or OSC playback-state API in the official material reviewed for Rekordbox 7.2.2.
 
-### 1. Ableton Link — recommended clock source
+### 1. Ableton Link — optional shared clock
 
 Rekordbox supports Ableton Link. Link provides tempo, beat, phase, and optional start/stop intent. It works between applications on the same machine or local network and is specifically designed for low-latency musical synchronization. It is built into Rekordbox: Ableton Live is not required, and there is no separate end-user Link installation or purchase.
 
@@ -31,13 +31,13 @@ Strengths:
 
 - Officially supported by Rekordbox and Ableton.
 - Musical phase rather than a stream of approximate wall-clock ticks.
-- No need to scrape the Rekordbox UI or read process memory.
+- Link itself needs no Rekordbox UI observation or process-memory access; it still supplies no deck-specific state.
 - The visual engine can calculate any future beat boundary against a monotonic host clock.
 
 Limits:
 
 - Link is a shared session without a permanent master application, not a read-only “master deck output.” Any participant can propose tempo changes, so Video Sync should never do so by default.
-- Rekordbox requires Link to be enabled globally and on the participating deck. We need to test how this fits the actual performance workflow, especially if manual beatmatching is preferred.
+- Rekordbox requires Link to be enabled globally and on the participating deck. In the user's test rig, enabling it disrupted the usual Beat Sync workflow, so the primary macOS path leaves it optional.
 - Link does not expose track identity, active deck, channel fader, hot cues, phrase labels, or song boundaries.
 
 ### 2. Rekordbox MIDI output — limited indicator path
@@ -46,7 +46,7 @@ Rekordbox MIDI Learn includes an `Indicator` control type and documents MIDI OUT
 
 It is not a hidden full-state API. The documented output is feature/indicator feedback for equipment, not track identity, waveform position, channel audio, arbitrary deck metadata, or a general WebSocket-like event stream. Keep the virtual endpoint only as a diagnostic; it is not the primary bridge.
 
-### 3. Controller MIDI — confirmed primary control path
+### 3. Controller MIDI — confirmed gesture/control path
 
 On 2026-09-04, a second CoreMIDI client passively received DDJ-GRV6 messages while Rekordbox 7.2.2 continued playing. The capture matched AlphaTheta's published assignments for Play/Pause, Beat Sync, and the 14-bit tempo fader. The published profile also identifies Hot Cues A-C, channel faders, and the crossfader. The bridge uses RtMidi over CoreMIDI and the corresponding Windows backend.
 
@@ -61,6 +61,10 @@ Limits:
 - Concurrent access is still device- and platform-specific; the successful coexistence observation is macOS plus this GRV6, not yet Windows proof.
 - Rekordbox MIDI Learn documents MIDI input mappings and indicator feedback; it is not a general event-output API.
 - A longer labeled capture and 30-minute audio soak are still required before calling every mapped control performance-qualified.
+
+### 3a. Visible Rekordbox deck state — primary macOS deck clock
+
+The macOS adapter reads permissioned, visible Accessibility controls for each deck's BPM, playhead, title when exposed, and Hot Cue metadata. It infers transport from playhead movement/stability and labels uncertain phase or missing metadata rather than treating controller button presses as absolute software state. The title fingerprint can identify software-only track loads when the current Rekordbox layout exposes it. This adapter is not yet available on Windows and still needs layout-by-layout live validation; see [deck-state v2](11-deck-state-v2.md).
 
 ### DDJ-GRV6-specific findings
 
@@ -97,18 +101,17 @@ We should avoid making an undocumented database or memory-reading technique the 
 
 Capturing the master signal can provide onset, energy, and approximate downbeat detection. It is useful for intensity or future reactive effects, but it has more latency and uncertainty than Link and cannot identify hot cues or tracks.
 
-## Proposed integration hierarchy
+## Current integration hierarchy
 
-1. **Clock:** Ableton Link.
-2. **Gestures and continuous controls:** passive DDJ-GRV6 MIDI observation using an explicit, versioned device profile.
-3. **Accepted boolean states:** Rekordbox MIDI indicator output only if a later test exposes a useful state that controller gestures cannot establish.
-4. **Song/active-deck state:** infer only from confirmed inputs; keep track-specific mapping disabled until a stable track key exists.
-5. **Fallback:** audio analysis for energy and recovery, never as the only proof of beat phase when Link is healthy.
-6. **Optional club mode:** PRO DJ LINK on supported hardware, likely using a separate host or bridge.
+1. **Deck clock and identity on macOS:** the visible Rekordbox BPM/playhead and title/cue metadata, with explicit inference confidence.
+2. **Gestures and continuous controls:** passive, profile-mapped controller MIDI; DDJ-GRV6 is the first hardware-tested profile.
+3. **Optional shared phase:** read-only Ableton Link when it fits the user's Beat Sync workflow.
+4. **Unsupported secondary probes:** Rekordbox MIDI indicator output only if later tests show useful state, never as a presumed full event stream.
+5. **Future platforms:** a Windows deck-state source and optional PRO DJ LINK club mode require separate validation. Master-audio analysis remains a non-authoritative fallback for energy, not cues or track identity.
 
 ## Test-footage rights decision
 
-The classic-film test scene uses only a Wikisource-hosted version of *Metropolis* (1927) that is identified as public domain in the United States. Later restorations, scores, and non-U.S. rights can differ. *Seven Samurai* (1954) is excluded because it remains copyright-protected; familiarity or age is not enough to make footage safe to reuse.
+The initial test scene used a Wikisource-hosted version of *Metropolis* (1927) identified as public domain in the United States. The current film catalog is broader, and this paragraph is not a rights clearance for it: consult [asset provenance](../assets/README.md) for each source. Later restorations, scores, and non-U.S. rights can differ. *Seven Samurai* (1954) is excluded because it remains copyright-protected; familiarity or age is not enough to make footage safe to reuse.
 
 ## Source material
 

@@ -7,7 +7,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:4316",
+    baseURL: process.env.VIDEO_SYNC_TEST_BASE_URL || "http://127.0.0.1:4316",
     browserName: "chromium",
     headless: true,
     viewport: { width: 1600, height: 1000 },

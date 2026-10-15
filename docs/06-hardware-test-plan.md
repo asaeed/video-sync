@@ -2,7 +2,7 @@
 
 ## Why these tests are required
 
-The preferred bridge path is Ableton Link plus passive DDJ-GRV6 MIDI. A 2026-09-04 macOS capture proved concurrent controller access while Rekordbox played and matched published Play/Pause, Beat Sync, and 14-bit tempo messages. The Rekordbox-to-virtual-input experiment received no data.
+The current macOS path combines visible Rekordbox deck state through Accessibility with passive DDJ-GRV6 MIDI; read-only Ableton Link is optional. A 2026-09-04 macOS capture proved concurrent controller access while Rekordbox played and matched published Play/Pause, Beat Sync, and 14-bit tempo messages. The Rekordbox-to-virtual-input experiment received no data.
 
 AlphaTheta publishes the remaining GRV6 assignments. We still need complete labeled deck 1/2 captures, disconnect recovery, Windows coexistence, and a performance soak before treating the profile as production-qualified.
 
@@ -23,14 +23,14 @@ For each action, record the direct GRV6 bytes, timestamp, deck identity, repetit
 | Action | Decks | Required for v1 | Fallback if unavailable |
 | --- | --- | --- | --- |
 | Play/pause | 1, 2 | Yes | dominance crossing |
-| Hot cues A–H | 1, 2 | A–C initially | manual Live control for any unmapped cue |
+| Hot cues A–H | 1, 2 | Yes; verify each mapping | Studio scene default or built-in deck-local random fallback, as configured |
 | Audio-loop wrap/reset | 1, 2 | Preferred for exact visual re-anchor | authored cue length when Accessibility exposes no loop bounds |
 | Load track | 1, 2 | Yes | controller LOAD when visible track identity is unavailable |
 | Beat Sync | 1, 2 | Diagnostic | Link health only |
 | Set master | 1, 2 | Diagnostic | do not infer; show unknown |
 | Channel faders | all used | Preferred | crossfader only |
 | Crossfader | global | Preferred | play/hot cue only |
-| Beat FX on/off/parameters | used controls | Deferred | no mirrored effect |
+| Beat FX on/off/parameters | used controls | Verify existing visual analogs | manual Live control if MIDI is unavailable |
 
 Run each mapped action at least 30 times, then restart the bridge and Rekordbox once and repeat. A message is accepted into the software profile only if it is stable, unambiguous, and passive. Repeat the same evidence standard after unplug/replug.
 
@@ -67,7 +67,7 @@ Test 100 consecutive quantized changes and a 30-minute soak while mixing normall
 
 ## Go/no-go rules
 
-- If Link is stable but MIDI sharing is incomplete, ship beat-scheduled automation first with explicit manual cue mappings.
-- If the browser POC is smooth but native viewer-core misses projector timing, optimize decode/preload before building more editor features.
+- If controller MIDI sharing is incomplete, use only observed deck state and explicit manual controls; do not claim cue or fader input that the bridge cannot see.
+- If the browser viewer misses projector timing, profile decode, seek, preload, and compositor behavior before considering a native renderer.
 - If the viewer disturbs Rekordbox audio, reduce decoder concurrency and GPU load before considering 4K or effects.
-- Never scrape the Rekordbox UI or read process memory as the primary live path.
+- Use only visible, permissioned Accessibility state for the macOS deck adapter; do not read Rekordbox process memory or treat hidden/private app state as a supported event stream.

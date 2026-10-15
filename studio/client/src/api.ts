@@ -56,11 +56,74 @@ export async function uploadSource(projectId: string, sourceId: string, file: Fi
   }));
 }
 
+export type PreparedClipMedia = Record<string, { file: string; durationSeconds: number }>;
+export type PreparationProgress = { completed: number; total: number; current: string | null; reused?: number };
+type PreparationResult = { media: PreparedClipMedia; created: number; reused: number; removed: number; warnings: string[] };
+
+export async function prepareClips(project: SceneProject, onProgress?: (progress: PreparationProgress) => void): Promise<PreparationResult> {
+  const response = await fetch(`/api/studio/projects/${encodeURIComponent(project.id)}/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "accept": "application/x-ndjson" },
+    body: JSON.stringify(project),
+  });
+  if (!response.ok) throw new Error((await response.text()) || "Could not prepare clips");
+  if (!response.headers.get("content-type")?.includes("application/x-ndjson")) return response.json() as Promise<PreparationResult>;
+  if (!response.body) throw new Error("Clip preparation response has no body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let result: PreparationResult | null = null;
+  const consume = (line: string) => {
+    if (!line.trim()) return;
+    const message = JSON.parse(line) as
+      | ({ type: "progress" } & PreparationProgress)
+      | { type: "done"; result: PreparationResult }
+      | { type: "error"; message: string };
+    if (message.type === "progress") onProgress?.({ completed: message.completed, total: message.total, current: message.current, reused: message.reused });
+    if (message.type === "done") result = message.result;
+    if (message.type === "error") throw new Error(message.message);
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value, { stream: !done });
+    let newline = pending.indexOf("\n");
+    while (newline !== -1) {
+      consume(pending.slice(0, newline));
+      pending = pending.slice(newline + 1);
+      newline = pending.indexOf("\n");
+    }
+    if (done) break;
+  }
+  consume(pending);
+  if (!result) throw new Error("Clip preparation ended without a result");
+  return result;
+}
+
 export async function publishProject(project: SceneProject, scene: RuntimeScene): Promise<{ file: string }> {
-  localStorage.setItem("video-sync-published-scene", JSON.stringify(scene));
-  return jsonResponse(await fetch(`/api/studio/projects/${encodeURIComponent(project.id)}/publish`, {
+  const result = await jsonResponse<{ file: string }>(await fetch(`/api/studio/projects/${encodeURIComponent(project.id)}/publish`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(scene),
+  }));
+  try { localStorage.setItem("video-sync-published-scene", JSON.stringify(scene)); }
+  catch { /* The server publication succeeded even if browser storage is unavailable. */ }
+  return result;
+}
+
+export async function exportScenePackage(project: SceneProject, scene: RuntimeScene): Promise<Blob> {
+  const response = await fetch(`/api/studio/projects/${encodeURIComponent(project.id)}/export`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ project, scene }),
+  });
+  if (!response.ok) throw new Error((await response.text()) || "Could not export scene");
+  return response.blob();
+}
+
+export async function importScenePackage(file: File): Promise<{ id: string; name: string }> {
+  return jsonResponse(await fetch("/api/studio/packages", {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: file,
   }));
 }

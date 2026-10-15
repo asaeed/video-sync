@@ -81,7 +81,7 @@ export function generateRandomLoop(scene, random = Math.random) {
     type,
     length: { ...length },
     clips: selected,
-    fit: config.fit ?? scene.fit ?? selected[0].fit ?? "cover",
+    fit: config.fit ?? scene.fit ?? selected[0].fit ?? "contain",
     ...recipeOptions(type, length, random),
   });
 }

@@ -344,7 +344,6 @@ process.once("SIGTERM", shutdown);
 
 server.listen(port, "127.0.0.1", () => {
   console.log(`Video Sync POC: http://127.0.0.1:${port}/`);
-  console.log(`Visual directions: http://127.0.0.1:${port}/studio/visual-directions/`);
   startBridge();
   startRekordboxAdapter();
 });

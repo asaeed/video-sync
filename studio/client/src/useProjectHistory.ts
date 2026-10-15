@@ -16,13 +16,13 @@ function describeChange(before: SceneProject, after: SceneProject): string {
     if (previous.defaultEndBehavior !== clip.defaultEndBehavior) return "Change clip ending";
   }
   if (before.visualLoops.length !== after.visualLoops.length) return after.visualLoops.length > before.visualLoops.length ? "Add video loop" : "Delete video loop";
+  if (before.visualLoops.some((loop, index) => loop.id !== after.visualLoops[index].id)) return "Reorder hot cues";
   for (const loop of after.visualLoops) {
     const previous = before.visualLoops.find((item) => item.id === loop.id);
     if (!previous) continue;
     if (previous.name !== loop.name) return "Rename video loop";
     if (previous.events.length !== loop.events.length) return loop.events.length > previous.events.length ? "Add clip instance" : "Delete clip instance";
     if (JSON.stringify(previous.length) !== JSON.stringify(loop.length)) return "Change loop length";
-    if (previous.compositing !== loop.compositing) return "Change loop visibility";
     for (const event of loop.events) {
       const old = previous.events.find((item) => item.id === event.id);
       if (!old) continue;
@@ -48,7 +48,6 @@ function describeChange(before: SceneProject, after: SceneProject): string {
     }
   }
   if (before.defaultLoopId !== after.defaultLoopId) return "Change default loop";
-  if (JSON.stringify(before.cueBindings) !== JSON.stringify(after.cueBindings)) return "Change hot cue mapping";
   return "Edit scene";
 }
 

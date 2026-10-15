@@ -33,7 +33,7 @@ RtMidi can create virtual ports with CoreMIDI on macOS and ALSA/JACK on Linux. I
 
 ## Capture live GRV6 evidence alongside Rekordbox
 
-1. Enable Ableton Link in Rekordbox and enable Link on a participating deck.
+1. Leave Ableton Link off for the primary macOS Beat Sync baseline. Turn it on only for a separate optional-Link test.
 2. List the MIDI ports and start the bridge against the GRV6 by name:
 
    ```sh
@@ -44,10 +44,10 @@ RtMidi can create virtual ports with CoreMIDI on macOS and ALSA/JACK on Linux. I
      --record rekordbox-session.jsonl
    ```
 
-3. Perform one labeled action at a time: play/pause, Hot Cues A-C, channel faders, crossfader, then loop state/reset controls.
+3. Perform one labeled action at a time: play/pause, Hot Cues A-H, LOAD 1/2, channel faders, crossfader, Beat FX, then loop state/reset controls.
 4. Keep the raw capture and compare it to AlphaTheta's published table before expanding the checked-in profile.
 
-The browser's **Live bridge** panel makes this capture visible while the emulator is open. `npm run dev` defaults to `DDJ-GRV6` and `bridge/config/ddj-grv6.csv`; use `VIDEO_SYNC_MIDI_MODE=virtual npm run dev` for the virtual self-test path. A Link reading of `0 peers` means the bridge is healthy but Rekordbox has not joined the same Link session.
+Live Console's **Bridge** drawer shows recent evidence and performance preflight; the full JSONL recording remains on disk. `npm run dev` defaults to `DDJ-GRV6` and `bridge/config/ddj-grv6.csv`; use `VIDEO_SYNC_MIDI_MODE=virtual npm run dev` for the virtual self-test path. A Link reading of `0 peers` is expected when Link is intentionally off and does not by itself mean MIDI or deck-state capture has failed.
 
 The browser receives replaceable Link clock snapshots at 10 Hz. To avoid an unbounded high-rate disk log, JSONL persistence keeps every controller event but samples a stable Link clock every five seconds, with immediate records when tempo, peer count, or shared start/stop intent changes.
 

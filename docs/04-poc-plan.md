@@ -1,10 +1,12 @@
 # Proof-of-concept plan and status
 
-## POC 0: browser interaction and scheduling model — implemented
+> The POC 0 verification snapshot below records the September 2026 experiment, including interface studies and AI footage that were later removed. It is not a description of today's UI. For current state and next work, see [project context](project-context.md), [architecture](03-architecture.md), and [Scene Studio](12-scene-studio.md).
+
+## POC 0: browser interaction and scheduling model — historical baseline
 
 Run `npm run dev` and open <http://127.0.0.1:4316/>.
 
-Implemented:
+Implemented in that early baseline:
 
 - simulated 80–180 BPM musical clock;
 - deterministic bar/beat scheduler;
@@ -30,7 +32,7 @@ Implemented:
 
 Automated tests cover note conversion, loaded preview, default and alternate loop timing, overlapping events, filter defaults, opacity normalization, Link-clock adoption, normalized controller commands, song deduplication, and the checked-in scene contract.
 
-This POC is intentionally honest about scope. Browser requestAnimationFrame and HTML video can demonstrate the rules and rough UI, but they cannot validate the final native decoder, display present timing, GRV6 coexistence, or Link synchronization.
+This browser POC demonstrates the sequencing rules and interaction model, but its short internal timing samples do not establish controller-to-projector latency or a sustained dual-deck performance result. Browser rendering remains the current implementation; a native decoder is only a fallback if measured tests require one.
 
 The original clip buttons were an acknowledged design failure: they exposed brief temporary appearances and reused the active sequence's video nodes. The v4 player makes every configured cue a named-loop selection. A jump cue's visual remains selected until another cue or scene replaces it; the visual-loop length is a repeat boundary, not a timeout.
 
@@ -48,7 +50,7 @@ The original clip buttons were an acknowledged design failure: they exposed brie
 - Earlier browser QA alternated configured cues 18 times, confirmed the selected cue remained highlighted, and found no temporary cue nodes. Pause produced zero measured media-time drift, and the projector received the same persistent selection and normalized visual mix.
 - The original single-clip Metropolis regression sequence was superseded by explicit two-clip timelines. Current automated and Playwright checks cover sequence, alternate, flash-overlay, call-response, crossfade, random fallback, and event in-points.
 - The integrated bridge panel received the headless process's ready and Link events. With Rekordbox open but not joined/routed, the observed state was `120.0 BPM`, `0 peers`, and `0 MIDI messages`; this is a useful negative result, not proof of Rekordbox control capture.
-- The bridge panel now sits below the preview and retains up to 500 timestamped status, Link-state-change, raw MIDI, and normalized-control rows in a keyboard-focusable, vertically resizable scroll feed.
+- At that snapshot, the bridge panel sat below the preview and retained up to 500 timestamped status, Link-state-change, raw MIDI, and normalized-control rows. It is now a left-side Live Console drawer with performance preflight.
 
 ## POC 1: Link/MIDI bridge recorder — foundation implemented
 
@@ -75,9 +77,9 @@ Remaining exit criteria:
 - does not change Rekordbox/controller behavior;
 - unplug/replug, adapter restart, and optional-Link loss recover safely.
 
-## POC 2: browser viewer qualification, native fallback
+## POC 2: browser viewer qualification — still open
 
-Qualify the existing browser compositor against the simulated/recorded bridge and actual projector before adding Studio. Build the earlier SDL3 + FFmpeg viewer-core only if measured browser performance misses the target.
+Qualify the existing browser compositor against captured bridge data, Rekordbox, and an actual projector. Scene Studio is already implemented as a browser authoring surface; this qualification remains open. Consider a native viewer only if measured browser performance misses the target after profiling.
 
 Behavior:
 
@@ -96,28 +98,22 @@ Exit criteria on the real projector:
 - 30-minute soak with no dropped output frames or Rekordbox audio disturbance;
 - measured button-to-photon delay and stable compensation range.
 
-## POC 3: Studio shell
+## POC 3: browser Scene Studio — implemented vertical slice
 
-Connect the Tauri Studio to the real scene schema and viewer-core preview.
+Scene Studio now edits source ranges and ordered loops in the browser, uses the Live visual engine for preview, prepares trimmed clips with FFmpeg, and saves and publishes through a local API. There is no Tauri shell or separate native preview renderer.
 
-First authoring path:
+Remaining authoring work:
 
-- import two to six local clips;
-- arrange one or more repeating visual-loop timelines;
-- optionally attach filters to an individual timeline event;
-- map hot cues to persistent visual-loop activation;
-- simulate BPM;
-- queue scenes and set after-N-songs;
-- validate/transcode media;
-- launch Player mode.
+- improve source discovery and agent-assisted clip selection outside the live runtime;
+- make packages practical when the source is a full film;
+- extend portable exports from one scene to a multi-scene set;
+- qualify authoring and playback behavior against real projector and hardware use.
 
 ## Recommended order
 
-1. Review and choose interface directions.
-2. Run the browser POC together to tune scene behavior.
-3. Complete labeled Link/direct-GRV6 captures with Rekordbox 7.2.2 on decks 1 and 2.
-4. Freeze only the bridge fields actually observed in that test; probe the GRV6 directly only for missing essentials.
-5. Benchmark the browser viewer on the actual projector using the v4 loop contract; keep the native viewer as a measured fallback.
-6. Build compact Live mode, then expand it into Author mode.
+1. Complete labeled Rekordbox Accessibility and direct-controller captures on both decks, including hot-cue loop wraps and software-only loads.
+2. Benchmark the browser viewer on the actual projector at dual-deck 1080p load, with a 30-minute soak and physical button-to-photon measurement.
+3. Fix only observed sync, decode, or recovery failures; keep a native viewer as a measured fallback.
+4. Improve source preparation, packages, and agent-assisted authoring without putting that work on the live path.
 
 This sequencing separates clock, controller, renderer, and editor risk so a failure in one is diagnosable.

@@ -34,11 +34,14 @@ test("Scene Studio saves, lists, reloads, and publishes a project without duplic
     const reloaded = (await request("GET", `/api/studio/projects/${project.id}`)).body;
     assert.deepEqual(reloaded, project);
 
-    const scene = { schemaVersion: 4, id: project.id, name: project.name };
+    const scene = { schemaVersion: 4, id: project.id, name: project.name, availability: "ready",
+      clips: [], visualLoops: [{ id: "default", events: [] }], defaultLoopId: "default" };
     const published = await request("POST", `/api/studio/projects/${project.id}/publish`, scene);
     assert.equal(published.status, 200);
     const reloadedScene = (await request("GET", `/api/studio/projects/${project.id}/published`)).body;
     assert.deepEqual(reloadedScene, scene);
+    const publishedScenes = (await request("GET", "/api/studio/published")).body;
+    assert.deepEqual(publishedScenes, [scene]);
   } finally {
     await rm(testRoot, { recursive: true, force: true });
   }

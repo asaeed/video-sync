@@ -1,41 +1,37 @@
-# Proposed architecture
+# Architecture and qualification targets
 
 ## Current recommendation
 
-Build three modules around one versioned scene and event contract:
+The current implementation has three modules around versioned scene and event contracts:
 
-1. **`performance-bridge`** — a small C++20 process using Ableton Link for musical clock and RtMidi for confirmed, passive DDJ-GRV6 controls alongside Rekordbox.
-2. **`browser-viewer`** — the existing deterministic JavaScript scheduler plus browser hardware video decoding and CSS/WebGL composition in a dedicated projector window.
-3. **`studio-player`** — the browser operator UI for scene authoring, set queueing, diagnostics, and live control, reusing the same viewer code for preview.
+1. **Input adapters** — a headless C++20 Ableton Link/RtMidi bridge for optional clock and controller gestures, plus a macOS adapter that observes visible Rekordbox deck state through Accessibility. A local Node server supervises both and relays their evidence.
+2. **Live Console and projector** — the browser scheduler, visual engine, scene queue, diagnostics, and a separate 16:9 output window. The output shares live state through `BroadcastChannel`.
+3. **Scene Studio** — a separate browser authoring UI that saves source ranges and ordered visual loops, prepares clips with FFmpeg, and publishes runtime scenes. Its loop preview uses the Live Console visual engine.
 
-This gives macOS and Windows one deterministic renderer while isolating device integration from presentation. The C++ process remains deliberately headless and narrow. The browser implementation has already shown good behavior in the POC and avoids duplicating the preview and projector renderers.
+This isolates device integration from presentation and avoids maintaining different preview and projector renderers. The bridge is intended to be cross-platform; the Rekordbox deck-state adapter currently has a macOS implementation only. The C++ process remains deliberately headless and narrow.
 
 A native C++/SDL renderer remains a fallback, not the default plan. Promote it only if measured 1080p dual-deck soak tests show browser frame pacing, decode, or projector fullscreen behavior cannot meet the performance targets.
 
 ## Runtime flow
 
 ```text
-Rekordbox 7.2.2 ─ Ableton Link ─────────┐
-DDJ-GRV6 ─ passive MIDI subscription ───┴─> performance-bridge ─> local event contract ─┐
-                                                                               v
-Scene JSON ─> media validation ─> preload/cache ─> scheduler ─> viewer-core
-                                                            │          │
-                                                            │          ├─ Metal (macOS)
-Studio / Player controls ────────────────────────────────────┘          └─ D3D11/Vulkan (Windows)
-                                                                               │
-                                                                               v
-                                                                  projector display
+Visible Rekordbox decks ─> macOS Accessibility adapter ─┐
+Controller MIDI ────────> C++ Link/MIDI bridge ──────────┼─> local Node relay ──SSE──> Live Console
+Ableton Link (optional) ──────────────────────────────────┘                         │
+                                                                                   BroadcastChannel
+Scene Studio ──save/prepare/publish──> local scene API ──> published scenes ────────┤
+                                                                                   projector window
 ```
 
 ## Why the process boundary matters
 
-- A controller disconnect or MIDI parsing bug cannot block the render thread.
-- The bridge can be tested with a recorder/replayer before a native renderer exists.
-- A simulated bridge feeds Studio previews and automated tests through the same contract.
-- Viewer watchdog and bridge restart policy stay simple.
+- A controller disconnect or MIDI parsing bug need not block the browser renderer.
+- The bridge and deck-state adapter can be tested with captured evidence; Live Console also records resolved visual state for controller-free replay.
+- Simulated and recorded input exercises Live Console and automated tests; Studio preview uses the same visual engine with its own BPM control.
+- The local server supervises bridge restarts independently of the browser windows.
 - Ableton Link licensing choices remain localized. Link is dual-licensed GPLv2+ and commercially; distribution needs a deliberate license decision.
 
-The spike writes a versioned JSON Lines evidence stream. The runtime protocol can use compact JSON over loopback UDP once its fields are based on a live Rekordbox capture. Clock messages are replaceable snapshots; cue/load/play events carry sequence numbers and monotonic timestamps. A missed snapshot is harmless because a newer one replaces it. Important edge events can be acknowledged or repeated briefly with the same ID for deduplication.
+The bridge writes a versioned JSON Lines evidence stream, and the local server delivers current state and events to the browser over Server-Sent Events. Clock messages are replaceable snapshots; cue/load/play events carry sequence numbers and source timestamps. Live Console's session recorder captures both bridge evidence and resolved visuals, but references local media instead of embedding it.
 
 Illustrative message:
 
@@ -73,7 +69,7 @@ The user’s proposed deck-1-to-deck-2 handoff should not be assumed from the cr
 
 - On the GRV6, Beat Sync toggles synchronization and Shift + Beat Sync sets that deck as sync master.
 - Rekordbox documents explicit master selection. Unloading/changing the master track may cause the other deck to become master, but crossfader dominance is not documented as an automatic master switch.
-- Therefore, the bridge tracks **sync master** and **audible/dominant deck** as separate state.
+- Therefore, visual dominance must not be treated as Rekordbox **sync master**. Current inputs do not expose a confirmed master identity; leave it unknown rather than inferring it from the crossfader.
 - Visual phase follows the selected observed deck clock, or Link when it is active and the deck-state path is unavailable. Hot-cue actions use the deck that emitted the controller event. Song qualification uses play/hot-cue first and dominant-deck crossing as a fallback.
 
 ## Song qualification
@@ -105,59 +101,22 @@ opacityN = rawN / (raw1 + raw2)
 
 The normalized opacities total 1 when at least one raw weight is nonzero. If both are zero, output is black. These controls represent fader intent, not measured audio amplitude; true loudness would require a later master-audio capture path.
 
-## Viewer-core
+## Browser performance engine
 
-### Threads
-
-- **Input:** receive and timestamp bridge messages.
-- **Scheduler:** convert beat rules to presentation times and publish immutable render state.
-- **Decode pool:** pre-open and decode current plus next-scene clips.
-- **Render:** display-linked, allocation-free composition and presentation.
-- **Control/UI:** never owns media timing.
-
-### Media
-
-- Decode with FFmpeg on both platforms; prefer VideoToolbox on macOS and D3D11VA where stable on Windows.
-- Present through SDL3 and native GPU textures.
-- Keep a CPU-decoding fallback for compatibility and diagnostics.
-- Pre-roll every current-scene clip and at least the next scene before it becomes eligible.
-- Benchmark H.264/HEVC delivery media against short-GOP or intra-frame intermediates such as ProRes 422 LT and DNxHR. Choose from measured seek latency, memory, and disk bandwidth.
-- Normalize the first target to 1920x1080, 60 fps, yuv420p, no audio.
-
-### Scheduling
-
-- Store musical durations as rational beat values; `1/16 note = 1/4 beat` in 4/4.
-- Recompute future recurring events when tempo changes.
-- Dispatch predecoded state ahead of the intended presentation boundary by a measured per-display lead time.
-- Never parse JSON, open files, allocate large buffers, or invoke AI on a performance boundary.
-
-### Display safety
-
-- Borderless full-screen output on a specifically selected external display.
-- Blackout, freeze, test pattern, diagnostics toggle, and cursor hiding.
-- If the display disconnects, keep the operator UI local and do not move it automatically.
-- If Link or MIDI disappears, continue at the last stable tempo while clearly flagging degraded sync.
+- `VisualEngine` schedules musical timelines and drives browser video elements; authored Studio previews and Live Console use the same resolver and appearance rules.
+- Local H.264 performance excerpts avoid network playback during a set. Studio uses FFmpeg before publication to prepare trimmed clips, then the browser decodes them. Fully covered Studio lanes stay timed but need not decode until revealed.
+- Each event can specify source in-point, repeat/hold behavior, rate, opacity, blend, filters, and optional pan/zoom. Full-frame `contain` is the default for new Studio events; fill/crop is explicit.
+- The projector is a separate browser window with a 16:9 output frame. The operator chooses its display and fullscreen mode; the application does not yet own OS-level display selection or presentation timing.
+- The Bridge drawer distinguishes live, stale, Link-only, manual, and replay states and checks loaded/next-scene media. Missing input must not silently masquerade as confirmed Rekordbox state.
+- Keep downloads, source search, agent work, and transcodes outside the performance path. A native renderer remains a measured fallback, not an active dependency.
 
 ## Studio
 
-The first Studio should have only:
-
-- media bin and provenance;
-- visual-loop timeline editor with measure/beat placement;
-- clip source time and looping controls per timeline event;
-- optional filters and beat-clocked pan/zoom motion attached to one event appearance, with raw video as the default;
-- explicit audio Hot Cue -> persistent visual-loop mappings;
-- BPM simulator and native-render preview;
-- scene cue-order mapping;
-- set queue and after-N-songs behavior;
-- media validation and performance estimate;
-- Player launch, display selection, and health.
-
-Tauri is appropriate for the shell because it is cross-platform and small, but `viewer-core` remains the authority for preview and show output so the Studio cannot silently diverge from live behavior.
+Scene Studio has a full-source timeline and moving ten-second detail timeline for defining clips, then a lane-based musical Loop Builder. Reordering loops maps the first eight to Hot Cues A–H; the starred default is separate. Every authored visual loop repeats, while audio jump/loop classification comes from live Rekordbox evidence when available. Studio saves editable schema-v5 projects and publishes compiled schema-v4 scenes through the local API. Save and Publish are separate; unpublished edits cannot replace a live scene. The set queue and projector controls remain in Live Console. An agent may use the local authoring API, but discovery and editing automation are not yet an integrated Studio feature.
 
 ## Scene contract
 
-Versioned JSON is human-readable and agent-editable. A clip describes media only. Each visual loop owns a repeating musical timeline; each event owns its clip reference, source timestamp, duration, appearance, and optional motion. The same clip can therefore be static in one loop, slowly reframed in another, and briefly filtered in a third. Subject recognition is an offline authoring aid; the live renderer consumes only normalized focus points and deterministic keyframes. The browser POC consumes a 36-scene film-footage runtime catalog; all 28 playable scenes have 12 clips and v4 persistent-loop mappings, while the eight source-needed wishlist contracts retain placeholders. The implemented queue semantics and media status are in [scene catalog and set sequencer](10-scene-catalog-and-sequencer.md). The direction and remaining integration constraints are in [the direction validation](08-direction-validation.md).
+Versioned JSON is human-readable and agent-editable. A clip describes media only. Each visual loop owns a repeating musical timeline; each event owns its clip reference, source timestamp, duration, appearance, and optional motion. The same clip can therefore be static in one loop, slowly reframed in another, and briefly filtered in a third. Subject recognition is an offline authoring aid; the live renderer consumes only normalized focus points and deterministic keyframes. The built-in catalog has 36 film-scene entries: 28 playable scenes with 12 clips each and eight source-needed concepts. The [runtime schema](07-scene-schema.md), [Studio authoring model](12-scene-studio.md), and [scene queue](10-scene-catalog-and-sequencer.md) contain the detailed contracts.
 
 ## Performance targets
 

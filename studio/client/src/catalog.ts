@@ -4,11 +4,7 @@ import { CLIP_COLORS, beatsFromMusical } from "./model";
 import { firstAvailableLane } from "./loop-lanes";
 import type { LoopEvent, RuntimeScene, SceneProject, VisualLoop } from "./types";
 
-export const STUDIO_SCENES = [
-  { id: "metropolis-machine", name: "Metropolis Machine" },
-  { id: "trip-to-the-moon", name: "A Trip to the Moon" },
-  { id: "nosferatu", name: "Nosferatu" },
-] as const;
+export const STUDIO_SCENES = SCENE_CATALOG.map(({ id, name, availability }) => ({ id, name, availability }));
 
 export const DEFAULT_SCENE_ID = STUDIO_SCENES[0].id;
 
@@ -29,8 +25,26 @@ const assetPath = (relativePath: string) => new URL(relativePath, "http://video-
 export function catalogProject(id: string): SceneProject {
   const definition = SCENE_CATALOG.find((scene) => scene.id === id);
   if (!definition || !isStudioScene(id)) throw new Error(`Unknown Studio scene: ${id}`);
-  const scene = buildScene(definition, assetPath) as unknown as RuntimeScene;
+  const scene = definition.availability === "ready" ? buildScene(definition, assetPath) as unknown as RuntimeScene : null;
   const now = new Date().toISOString();
+  if (!scene) return {
+    projectVersion: 1,
+    schemaVersion: 5,
+    id: definition.id,
+    name: definition.name,
+    style: definition.style,
+    source: definition.rights,
+    ...(definition.sourcePage ? { sourcePage: definition.sourcePage } : {}),
+    group: definition.group,
+    previewBpm: 100,
+    createdAt: now,
+    updatedAt: now,
+    sources: [],
+    clips: [],
+    visualLoops: [{ id: "song-default", name: "Default", length: { bars: 4 }, repeat: true, events: [] }],
+    defaultLoopId: "song-default",
+    advance: { afterSongs: 1 },
+  };
   const sources: SceneProject["sources"] = scene.clips.map((clip, index) => ({
     id: `source-${clip.id}`,
     label: clip.label,
@@ -76,15 +90,8 @@ export function catalogProject(id: string): SceneProject {
       name: loop.name,
       length: structuredClone(loop.length),
       repeat: true,
-      ...(events.some((event) => event.appearance.opacityEnvelope) ? { compositing: "layers" as const } : {}),
       events,
     };
-  });
-  const bindingByInput = new Map(scene.cueBindings.map((binding) => [binding.input, binding]));
-  const cueBindings: SceneProject["cueBindings"] = "ABCDEFGH".split("").map((letter) => {
-    const input = `hotCue${letter}` as SceneProject["cueBindings"][number]["input"];
-    const binding = bindingByInput.get(input);
-    return { input, loopId: binding?.visual.loopId ?? null, cueType: binding?.cue.type === "jump" ? "jump" : "loop" };
   });
   return {
     projectVersion: 1,
@@ -102,7 +109,6 @@ export function catalogProject(id: string): SceneProject {
     clips,
     visualLoops,
     defaultLoopId: scene.defaultLoopId,
-    cueBindings,
     randomLoop: structuredClone(scene.randomLoop),
     advance: structuredClone(scene.advance),
   };
@@ -114,7 +120,7 @@ export function catalogProject(id: string): SceneProject {
 export function migrateLegacyDefaultClipRanges(project: SceneProject): { project: SceneProject; migrated: boolean } {
   if (!isStudioScene(project.id)) return { project, migrated: false };
   const definition = SCENE_CATALOG.find((scene) => scene.id === project.id);
-  if (!definition) return { project, migrated: false };
+  if (!definition || definition.availability !== "ready") return { project, migrated: false };
   const runtime = buildScene(definition, assetPath) as unknown as RuntimeScene;
   const originalById = new Map(runtime.clips.map((clip) => [clip.id, clip]));
   const expanded = structuredClone(project);

@@ -1,4 +1,4 @@
-import type { CueBinding, LoopEvent, MusicalTime, RuntimeScene, SceneProject, SourceClip, VisualLoop } from "./types";
+import type { LoopEvent, MusicalTime, RuntimeScene, SceneProject, SourceClip, VisualLoop } from "./types";
 import { firstAvailableLane, laneOf } from "./loop-lanes";
 
 export const CLIP_COLORS = ["#78c7dc", "#eab56f", "#d892d9", "#8ed09d", "#ee7f75", "#9d9bea", "#d4cf70", "#6fcdbd"];
@@ -30,7 +30,7 @@ export function uniqueId(prefix: string, existingIds: string[]): string {
 }
 
 export function emptyAppearance(z = 0): LoopEvent["appearance"] {
-  return { z, opacity: 1, blendMode: "normal", fit: "cover", filters: [] };
+  return { z, opacity: 1, blendMode: "normal", fit: "contain", filters: [] };
 }
 
 export function makeClip(project: SceneProject, sourceId: string, inSeconds: number, outSeconds: number): SourceClip {
@@ -92,11 +92,6 @@ export function duplicateEventAfter(loop: VisualLoop, eventId: string): string |
 
 export function sampleProject(): SceneProject {
   const now = new Date().toISOString();
-  const cues = CUE_LETTERS.map((letter, index): CueBinding => ({
-    input: `hotCue${letter}`,
-    loopId: index === 0 ? "cue-a-loop" : null,
-    cueType: index === 2 ? "jump" : "loop",
-  }));
   return {
     projectVersion: 1,
     schemaVersion: 5,
@@ -146,11 +141,10 @@ export function sampleProject(): SceneProject {
       },
     ],
     defaultLoopId: "song-default",
-    cueBindings: cues,
   };
 }
 
-export function compileRuntimeScene(project: SceneProject): RuntimeScene {
+export function compileRuntimeScene(project: SceneProject, preparedMedia: Record<string, { file: string; durationSeconds: number }> = {}): RuntimeScene {
   const sources = new Map(project.sources.map((source) => [source.id, source]));
   const clips = project.clips.flatMap((clip) => {
     const source = sources.get(clip.sourceId);
@@ -158,13 +152,12 @@ export function compileRuntimeScene(project: SceneProject): RuntimeScene {
     return [{
       id: clip.id,
       label: clip.label,
-      src: source.file,
-      durationSeconds: source.durationSeconds,
-      startSeconds: clip.inSeconds,
+      src: preparedMedia[clip.id]?.file ?? source.file,
+      durationSeconds: preparedMedia[clip.id]?.durationSeconds ?? source.durationSeconds,
+      startSeconds: preparedMedia[clip.id] ? 0 : clip.inSeconds,
       ...(clip.subjectFocus ? { subjectFocus: clip.subjectFocus } : {}),
     }];
   });
-  const loopsById = new Map(project.visualLoops.map((loop) => [loop.id, loop]));
   return {
     schemaVersion: 4,
     id: project.id,
@@ -181,11 +174,13 @@ export function compileRuntimeScene(project: SceneProject): RuntimeScene {
       name: loop.name,
       length: loop.length,
       repeat: true,
-      ...(loop.compositing === "layers" ? { compositing: "layers" as const } : {}),
       events: loop.events.flatMap((event) => {
         const clip = project.clips.find((candidate) => candidate.id === event.clipId);
         if (!clip || !sources.has(clip.sourceId)) return [];
-        const startSeconds = Math.min(clip.outSeconds, clip.inSeconds + Math.max(0, event.source.offsetSeconds));
+        const prepared = preparedMedia[clip.id];
+        const startSeconds = prepared
+          ? Math.min(prepared.durationSeconds, Math.max(0, event.source.offsetSeconds))
+          : Math.min(clip.outSeconds, clip.inSeconds + Math.max(0, event.source.offsetSeconds));
         return [{
           id: event.id,
           at: event.at,
@@ -194,7 +189,7 @@ export function compileRuntimeScene(project: SceneProject): RuntimeScene {
           lane: laneOf(event),
           source: {
             startSeconds,
-            endSeconds: clip.outSeconds,
+            endSeconds: prepared?.durationSeconds ?? clip.outSeconds,
             loop: event.source.endBehavior === "loop",
             rate: event.source.rate,
           },
@@ -203,25 +198,19 @@ export function compileRuntimeScene(project: SceneProject): RuntimeScene {
       }),
     })),
     defaultLoopId: project.defaultLoopId,
-    cueBindings: project.cueBindings.flatMap((binding) => {
-      const loop = binding.loopId ? loopsById.get(binding.loopId) : null;
-      if (!loop) return [];
-      const cue = binding.cueType === "jump" ? { type: "jump" as const } : { type: "loop" as const, length: loop.length };
-      return [{
-        input: binding.input,
-        cue,
-        visual: {
-          loopId: loop.id,
-          retrigger: binding.cueType === "jump" ? "cue-trigger" as const : "audio-loop-cycle" as const,
-        },
-      }];
-    }),
+    // The authoring list is the cue map: its first eight loops become A–H.
+    // The audio cue kind comes from Rekordbox when available, not this visual edit.
+    cueBindings: CUE_LETTERS.map((letter, index) => ({
+      input: `hotCue${letter}` as `hotCue${typeof CUE_LETTERS[number]}`,
+      cue: { type: "auto" as const },
+      visual: { loopId: project.visualLoops[index]?.id ?? project.defaultLoopId, retrigger: "cue-trigger" as const },
+    })),
     randomLoop: {
       id: "random-loop",
       recipes: project.randomLoop?.recipes ?? ["sequence", "alternate", "flash-overlay", "call-response", "crossfade"],
       lengths: project.randomLoop?.lengths ?? [{ bars: 1 }, { bars: 2 }, { bars: 4 }],
       candidateClipIds: clips.map((clip) => clip.id),
-      fit: project.randomLoop?.fit ?? "cover",
+      fit: project.randomLoop?.fit ?? "contain",
     },
     advance: project.advance ?? { afterSongs: 1 },
   };
