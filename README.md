@@ -2,6 +2,8 @@
 
 Low-latency, beat-synchronous film visuals for Rekordbox DJ sets.
 
+**Read more:** [Video Sync on niltoid.com](https://niltoid.com/blog/video-sync/).
+
 [![Test](https://github.com/asaeed/video-sync/actions/workflows/test.yml/badge.svg)](https://github.com/asaeed/video-sync/actions/workflows/test.yml)
 
 Video Sync turns DJ performance data into edited video sequences on a separate projector display. It follows two Rekordbox decks, mixes their visual opacity with the channel levels and crossfader, maps Hot Cues and Beat FX to visual changes, and advances through an ordered queue of reusable scenes.
