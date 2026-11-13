@@ -142,6 +142,7 @@ export const SCENE_CATALOG = [
     availability: "ready",
     rights: "Metropolis (1927), public-domain U.S. release source.",
     sourcePage: "https://en.wikisource.org/wiki/File:Metropolis_(1927,_English_titles_1930s).webm",
+    sourceMediaUrl: "https://upload.wikimedia.org/wikisource/en/7/75/Metropolis_%281927%2C_English_titles_1930s%29.webm",
     fit: "contain",
     clips: [
       ["Robot reveal", "../assets/scenes/metropolis/robot-reveal.mp4", 0],

@@ -91,10 +91,12 @@ Review [asset provenance](assets/README.md), then list or generate selected scen
 
 ```sh
 npm run media:archive -- --list
-npm run media:archive -- metropolis-machine trip-to-the-moon
+npm run media:archive -- gumby-clay-trip trip-to-the-moon
 ```
 
 The generator seeks into the configured source and creates separate silent, eight-second, 720p H.264 performance clips. Only generate and perform material you are entitled to use in your territory; public-domain status can vary by country, scan, restoration, soundtrack, and edition.
+
+All 28 playable films have an original-source page and either a direct `sourceMediaUrl` or an Internet Archive `archiveId` in `poc/scene-catalog.mjs`. The eight source-needed concepts are not included in that coverage. Metropolis has a direct original-film URL, but its named local excerpts are not supported by this generator; download the original for local editing instead. Original-source coverage does not reproduce locally authored edits or browser-local Studio projects.
 
 ## Use it with Rekordbox
 
