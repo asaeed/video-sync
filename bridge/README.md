@@ -18,7 +18,7 @@ cmake --build .build/bridge --parallel
 
 The executable is `.build/bridge/video-sync-bridge`.
 
-For the integrated development path, build once with `npm run bridge:build`, then use `npm run dev`. The Node development server launches this headless executable, records `.build/bridge-live.jsonl`, and relays recent Link/MIDI evidence to the browser over `/api/bridge/events`. `/api/bridge/status` exposes the same status as JSON.
+For the integrated development path, build once with `npm run bridge:build`, then use `npm run dev`. The relay passes `--no-link` by default, keeping the normal macOS deck-state/MIDI path independent of Rekordbox Link mode. Leave global Link off in Rekordbox for normal deck-to-deck Beat Sync. Opt into Link deliberately with `VIDEO_SYNC_LINK=on npm run dev`; the standalone bridge binary still enables Link unless passed `--no-link`. The Node development server launches this headless executable, records `.build/bridge-live.jsonl`, and relays recent Link/MIDI evidence to the browser over `/api/bridge/events`. `/api/bridge/status` exposes the same status as JSON.
 
 ## Prove the local transports first
 
@@ -51,7 +51,9 @@ Live Console's **Bridge** drawer shows recent evidence and performance preflight
 
 The browser receives replaceable Link clock snapshots at 10 Hz. To avoid an unbounded high-rate disk log, JSONL persistence keeps every controller event but samples a stable Link clock every five seconds, with immediate records when tempo, peer count, or shared start/stop intent changes.
 
-The GRV6 Play/Pause control is a momentary press edge, not an absolute transport value. The relay uses it as a low-latency hint, while the macOS adapter confirms absolute play/pause from visible Rekordbox playhead motion and stability. A short hint grace period prevents a stale moving playhead sample from undoing a physical Stop press. Confirmed state reconciles the persisted `.build/bridge-transport-state.json` snapshot, and updates remain scoped to the deck that actually changed.
+The GRV6 Play/Pause control is a momentary press edge, not an absolute transport value. The relay uses it as a low-latency hint, while the macOS adapter confirms absolute play/pause from visible Rekordbox playhead motion and stability. A short hint grace period prevents a stale moving playhead sample from undoing a physical Stop press. Confirmed state reconciles the persisted `.build/bridge-transport-state.json` snapshot, and updates remain scoped to the deck that actually changed. The macOS adapter services app lifecycle events while polling so Rekordbox can open after the bridge or relaunch without leaving transport stuck on MIDI parity. It scans the main standard window rather than transient tooltips for deck geometry.
+
+`npm test` includes a macOS lifecycle regression that opens, closes, and reopens its own temporary background fixture app; it does not restart Rekordbox.
 
 Direct controller input still supplies the fastest Hot Cue press edge. The deck-state v2 path adds visible cue timestamps plus conservative `cue`, `loop`, or `unknown` classification. When Rekordbox Accessibility exposes a loop end or beat length, a detected playhead wrap re-anchors the active visual loop at the interpolated wrap time. Otherwise, the authored cue contract remains the explicit fallback.
 

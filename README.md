@@ -104,7 +104,9 @@ The generator seeks into the configured source and creates separate silent, eigh
 4. Build the bridge once with `npm run bridge:build`, then start everything with `npm run dev`.
 5. Open the performance UI and use **Open projector output** on the display connected to the projector.
 
-Ableton Link is optional in the current macOS path: the deck-state adapter reads the visible Rekordbox BPM, playhead, and Hot Cue markers directly. If enabling Link changes Rekordbox Beat Sync behavior on your setup, leave Link disabled; the controller and deck-state paths still operate.
+The normal macOS setup uses **Link off** in Rekordbox. Video Sync reads each deck's BPM, playhead, and Hot Cue markers directly; its relay does not join Ableton Link by default. This preserves Rekordbox's normal deck-to-deck Beat Sync workflow. Enabling global Link in Rekordbox changes each deck's Beat Sync control into a Link control that follows the shared Link session ([Rekordbox FAQ](https://rekordbox.com/en/support/faq/operation-hints-7/#faq-4709)).
+
+For an intentional Link setup, opt the relay in with `VIDEO_SYNC_LINK=on npm run dev` and enable the appropriate Rekordbox deck Link controls. Leaving the relay opted out does not switch Rekordbox's global Link setting for you.
 
 Mapped controller Load presses claim the next item in the scene queue. On macOS, the deck-state v2 adapter also fingerprints a visible Rekordbox track title and advances the queue when that identity changes, covering mouse and keyboard loads when the current layout exposes the title through Accessibility. The two paths are deduplicated so one controller load consumes one queue entry. If a Rekordbox layout does not expose track identity, controller Load and manual selection remain the fallback.
 

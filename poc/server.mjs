@@ -20,6 +20,7 @@ const bridgeMapPath = process.env.VIDEO_SYNC_BRIDGE_MAP || join(root, "bridge", 
 const bridgeMidiPortName = process.env.VIDEO_SYNC_MIDI_PORT_NAME || "DDJ-GRV6";
 const bridgeMidiMode = process.env.VIDEO_SYNC_MIDI_MODE === "virtual" ? "virtual" : "direct";
 const bridgeEnabled = process.env.VIDEO_SYNC_BRIDGE !== "off";
+const bridgeLinkEnabled = process.env.VIDEO_SYNC_LINK === "on";
 const rekordboxDumpElements = process.env.VIDEO_SYNC_REKORDBOX_DUMP_ELEMENTS === "1";
 const bridgeClients = new Set();
 const recentBridgeMessages = [];
@@ -161,6 +162,7 @@ async function startBridge() {
   }
 
   const args = ["--clock-hz", "10", "--record", bridgeRecordPath];
+  if (!bridgeLinkEnabled) args.push("--no-link");
   if (bridgeMidiMode === "direct") args.push("--midi-port-name", bridgeMidiPortName);
   if (bridgeMapPath) args.push("--map", bridgeMapPath);
   bridgeProcess = spawn(bridgeBinary, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });

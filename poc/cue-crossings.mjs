@@ -9,6 +9,34 @@ export function cueTimelineSignature(cues = []) {
   ].join(":")).join("|");
 }
 
+function canCompareCueTimelines(previous, current) {
+  return Boolean(previous?.loaded && current?.loaded && previous.trackKey && previous.trackKey === current.trackKey
+    && ["visible", "cached"].includes(previous.hotCueMetadataBasis) && current.hotCueMetadataBasis === "visible"
+    && current.epochMs > previous.epochMs);
+}
+
+export function deletedHotCues(previous, current) {
+  if (!canCompareCueTimelines(previous, current)) return [];
+  const remaining = new Set(normalizeHotCues(current.hotCues).map((cue) => cue.cueIndex));
+  return normalizeHotCues(previous.hotCues).filter((cue) => !remaining.has(cue.cueIndex));
+}
+
+// A visible timeline edit is separate from passing an existing cue timestamp.
+// Compare only observations of the same load with an established cue baseline.
+export function assignedHotCues(previous, current, { bpm = null } = {}) {
+  if (!canCompareCueTimelines(previous, current) || !Number.isFinite(current.positionSeconds)) return [];
+  const before = new Map(normalizeHotCues(previous.hotCues).map((cue) => [cue.cueIndex, cue]));
+  return normalizeHotCues(current.hotCues).flatMap((cue) => {
+    const old = before.get(cue.cueIndex);
+    if (old && Math.abs(old.timeSeconds - cue.timeSeconds) < 0.035) return [];
+    // Rekordbox sometimes exposes only an anonymous timestamp. A saved loop
+    // still starts at that timestamp, even when its kind is unavailable.
+    const elapsedBeats = cue.kind === "cue" || !(bpm > 0)
+      ? 0 : Math.max(0, current.positionSeconds - cue.timeSeconds) * bpm / 60;
+    return [{ ...cue, elapsedBeats }];
+  });
+}
+
 export function crossedHotCues(previous, current, { playing = false } = {}) {
   if (!playing || !previous || !current) return [];
   const previousPosition = Number(previous.positionSeconds);

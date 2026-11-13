@@ -199,9 +199,16 @@ static NSNumber *CueLengthBeatsFromMetadata(NSString *metadata) {
   return beats > 0 && beats <= 256 ? @(beats) : nil;
 }
 
+static void WaitForNextPoll(NSTimeInterval interval) {
+  // NSWorkspace refreshes runningApplications through main-run-loop events.
+  // Sleeping the polling thread leaves its launch-time app list cached forever.
+  [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:interval]];
+}
+
 static NSRunningApplication *FindRekordbox(void) {
   for (NSRunningApplication *candidate in NSWorkspace.sharedWorkspace.runningApplications) {
-    if ([candidate.localizedName.lowercaseString isEqualToString:@"rekordbox"]) return candidate;
+    if ([candidate.bundleIdentifier isEqualToString:@"com.pioneerdj.rekordboxdj"] ||
+        [candidate.localizedName.lowercaseString isEqualToString:@"rekordbox"]) return candidate;
   }
   return nil;
 }
@@ -209,7 +216,24 @@ static NSRunningApplication *FindRekordbox(void) {
 static NSDictionary *ScanDeckElements(NSRunningApplication *rekordbox, BOOL includeDebugElements) {
   AXUIElementRef application = AXUIElementCreateApplication(rekordbox.processIdentifier);
   NSArray *windows = CopyAttribute(application, kAXWindowsAttribute);
-  AXUIElementRef window = windows.count > 0 ? (__bridge AXUIElementRef)windows[0] : application;
+  id mainWindow = CopyAttribute(application, kAXMainWindowAttribute);
+  // Rekordbox puts transient tooltips first in AXWindows. Their tiny bounds
+  // must never decide left/right deck identity or the playhead search region.
+  if (!mainWindow || ![StringAttribute((__bridge AXUIElementRef)mainWindow, kAXSubroleAttribute) isEqualToString:(__bridge NSString *)kAXStandardWindowSubrole]) {
+    mainWindow = nil;
+    double largestArea = 0;
+    for (id candidate in windows) {
+      AXUIElementRef candidateWindow = (__bridge AXUIElementRef)candidate;
+      if (![StringAttribute(candidateWindow, kAXSubroleAttribute) isEqualToString:(__bridge NSString *)kAXStandardWindowSubrole]) continue;
+      NSSize size = ElementSize(candidateWindow);
+      double area = size.width * size.height;
+      if (isfinite(area) && area > largestArea) {
+        mainWindow = candidate;
+        largestArea = area;
+      }
+    }
+  }
+  AXUIElementRef window = mainWindow ? (__bridge AXUIElementRef)mainWindow : application;
   NSPoint windowPosition = ElementPosition(window);
   NSSize windowSize = ElementSize(window);
   double midpoint = isfinite(windowPosition.x) && isfinite(windowSize.width)
@@ -218,7 +242,7 @@ static NSDictionary *ScanDeckElements(NSRunningApplication *rekordbox, BOOL incl
   double deckBandBottom = isfinite(windowPosition.y) ? windowPosition.y + 380.0 : 430.0;
 
   NSMutableArray *elements = [NSMutableArray array];
-  CollectDeckCandidates(application, 0, elements);
+  CollectDeckCandidates(window, 0, elements);
   CFRelease(application);
 
   NSMutableArray *records = [NSMutableArray array];
@@ -395,12 +419,13 @@ int main(void) {
         NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
         NSRunningApplication *rekordbox = FindRekordbox();
         if (!rekordbox) {
+          announcedReady = NO;
           if (![lastSignature isEqualToString:@"not-running"] || now - lastEmit >= 1.0) {
             Emit(@"rekordbox.adapter-status", @{ @"state": @"waiting", @"detail": @"rekordbox is not running." }, ++sequence);
             lastSignature = @"not-running";
             lastEmit = now;
           }
-          [NSThread sleepForTimeInterval:0.25];
+          WaitForNextPoll(0.25);
           continue;
         }
 
@@ -444,7 +469,7 @@ int main(void) {
           lastSignature = signature;
           lastEmit = now;
         }
-        [NSThread sleepForTimeInterval:0.15];
+        WaitForNextPoll(0.15);
       }
     }
   }

@@ -21,6 +21,8 @@ Forward continuous playhead motion confirms playback. A stable playhead for 500 
 
 Starting Video Sync during an already-playing song therefore converges to `playhead-motion` without relying on button-press parity. Starting during pause converges to `playhead-stable`.
 
+The macOS polling loop services the main run loop so NSWorkspace discovers Rekordbox when it launches after Video Sync, exits, or reopens. Deck geometry and Accessibility fields come from the main standard window; transient tooltips must not change left/right deck identity.
+
 ## Loads and identity
 
 Each adapter session maintains `loadGeneration` per deck. It advances when:
@@ -35,6 +37,10 @@ Loading the same track again without a controller edge cannot be distinguished f
 ## Hot Cues and loops
 
 Every cue contains a letter index and timestamp. `kind` is `cue`, `loop`, or `unknown`. Loop bounds are included only when the Accessibility label exposes an end time or beat length.
+
+Creating or reassigning a visible Hot Cue slot selects that slot's visual route without waiting for a later timestamp crossing. One-shot cues start their visual immediately. Saved loops anchor to the stored audio-loop start, including when the assignment happens more than five seconds into the loop. A new anonymous cue timestamp also uses that stored start when Rekordbox does not expose its type. Cue assignment preserves confirmed play/pause state.
+
+Deleting the active cue selects the scene default, clears its cue metadata, and preserves deck transport. Deleting another cue does not change the active route. Initial scans, track changes, and hidden/cached PAD metadata do not count as creation or deletion; live edits require the Hot Cue grid to be visible to Accessibility.
 
 Crossing a cue timestamp selects its visual route at the interpolated crossing time. When an active loop has observed bounds, a backwards playhead jump from its end to its start re-anchors the visual loop at the interpolated wrap time. Unknown bounds fall back to the authored scene cue contract.
 

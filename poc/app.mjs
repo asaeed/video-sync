@@ -12,7 +12,7 @@ import { beatAt, SongCounter, nowEpochMs, reanchorClock, resyncClockAtQuantum } 
 import { musicalToBeats } from "./sequencer.mjs";
 import { parseDeckRuntime } from "./transport-state.mjs";
 import { parsePlayerState, serializePlayerState } from "./player-state.mjs";
-import { crossedHotCues, detectedLoopWrap } from "./cue-crossings.mjs";
+import { assignedHotCues, crossedHotCues, deletedHotCues, detectedLoopWrap } from "./cue-crossings.mjs";
 import { readSession, sessionBlob, SessionRecorder, SessionReplayer } from "./session-recorder.mjs";
 import { inputReadiness, sceneMediaPlan } from "./preflight.mjs";
 
@@ -529,7 +529,8 @@ function triggerCue(deckNumber, cueIndex, options = {}) {
   const deck = snapshot.decks[deckNumber - 1];
   if (!deck.loaded) loadDeck(deckNumber, { deferPhrase: true });
   const route = resolveHotCueRoute(sceneById(deck.sceneId), cueIndex, deck.randomLoop);
-  ensureDeckPlaying(deckNumber, route.input);
+  if (options.preserveTransport) deck.started = true;
+  else ensureDeckPlaying(deckNumber, route.input);
   const epochMs = nowEpochMs();
   const requestedAnchor = Number(options.anchorEpochMs);
   const anchorEpochMs = Number.isFinite(requestedAnchor)
@@ -546,8 +547,9 @@ function triggerCue(deckNumber, cueIndex, options = {}) {
     ...(authoredLengthBeats ? { lengthBeats: authoredLengthBeats } : {}),
     metadataBasis: "scene-contract-fallback",
   };
-  deck.cueAnchorLinkBeat = route.binding ? beatAt(snapshot.linkClock, anchorEpochMs) : null;
-  deck.loopAnchorBeat = beatAt(deck.clock, anchorEpochMs);
+  const elapsedBeats = Number.isFinite(options.elapsedBeats) ? Math.max(0, options.elapsedBeats) : 0;
+  deck.cueAnchorLinkBeat = route.binding ? beatAt(snapshot.linkClock, anchorEpochMs) - elapsedBeats : null;
+  deck.loopAnchorBeat = beatAt(deck.clock, anchorEpochMs) - elapsedBeats;
   deck.loopGeneration += 1;
   saveDeckRuntime();
   if (!options.deferBroadcast) broadcastSnapshot();
@@ -559,20 +561,48 @@ function applyAutomaticCueCrossings(message) {
     const deckNumber = Number(deckState.deck);
     reportCueMetadataAvailability(deckState, epochMs);
     const positionSeconds = typeof deckState.positionSeconds === "number" ? deckState.positionSeconds : NaN;
-    if (!Number.isInteger(deckNumber) || !Number.isFinite(positionSeconds)) continue;
+    if (!Number.isInteger(deckNumber)) continue;
     const current = {
+      loaded: Boolean(deckState.loaded),
+      trackKey: `${message.payload?.adapterSessionId ?? "legacy"}:${deckState.trackFingerprint ?? "anonymous"}:${deckState.loadGeneration ?? 0}`,
+      hotCueMetadataBasis: deckState.hotCueMetadataBasis,
       positionSeconds,
       hotCues: deckState.hotCues ?? [],
       epochMs,
     };
     const previous = automaticCueObservations.get(deckNumber);
     automaticCueObservations.set(deckNumber, current);
-    if (epochMs < (manualCueSuppressionUntil.get(deckNumber) ?? 0)) continue;
-
     const deck = snapshot.decks[deckNumber - 1];
     const scene = deck ? sceneById(deck.sceneId) : null;
     if (!deck || !scene) continue;
     deck.hotCues = current.hotCues;
+    const activeCueIndex = deck.activeCueInput ? deck.activeCueInput.charCodeAt(deck.activeCueInput.length - 1) - 65 : null;
+    if (deletedHotCues(previous, current).some((cue) => cue.cueIndex === activeCueIndex)) {
+      deck.activeLoopId = scene.defaultLoopId;
+      deck.activeCueInput = null;
+      deck.activeCueMetadata = null;
+      deck.cueAnchorLinkBeat = null;
+      deck.loopAnchorBeat = beatAt(deck.clock, epochMs);
+      deck.loopGeneration += 1;
+      manualCueSuppressionUntil.delete(deckNumber);
+      saveDeckRuntime();
+      appendBridgeEvent(`cue deleted · D${deckNumber} · scene default`, "control", epochMs);
+      continue;
+    }
+    const assignment = assignedHotCues(previous, current, { bpm: deckState.bpm }).at(-1);
+    if (assignment) {
+      triggerCue(deckNumber, assignment.cueIndex, {
+        automatic: true,
+        preserveTransport: true,
+        anchorEpochMs: epochMs,
+        elapsedBeats: assignment.elapsedBeats,
+        cue: assignment,
+        deferBroadcast: true,
+      });
+      appendBridgeEvent(`cue assigned · D${deckNumber} · ${String.fromCharCode(65 + assignment.cueIndex)}`, "control", epochMs);
+      continue;
+    }
+    if (epochMs < (manualCueSuppressionUntil.get(deckNumber) ?? 0)) continue;
     if (deck.activeCueInput) {
       const activeCueIndex = deck.activeCueInput.charCodeAt(deck.activeCueInput.length - 1) - 65;
       const currentActiveCue = current.hotCues.find((cue) => cue.cueIndex === activeCueIndex) ?? deck.activeCueMetadata;
