@@ -72,6 +72,8 @@ npm run studio:build
 npm run dev
 ```
 
+On a fresh clone, follow [Add local video media](#add-local-video-media) before expecting video playback. Installing dependencies and building the app do not download video files.
+
 Open <http://127.0.0.1:4316/>. The interface also works as a controller emulator when no DJ hardware is attached.
 
 Use **Record** in the Live Console before playing, then **Stop** to download a compressed `.json.gz` session. **Replay…** opens that file and drives the same visual engine and projector output offline. It includes the used scene definitions but references local video media rather than embedding it; keep the source clips available on the replay computer. Replay suspends live controls until **Stop** is pressed.
@@ -97,6 +99,78 @@ npm run media:archive -- gumby-clay-trip trip-to-the-moon
 The generator seeks into the configured source and creates separate silent, eight-second, 720p H.264 performance clips. Only generate and perform material you are entitled to use in your territory; public-domain status can vary by country, scan, restoration, soundtrack, and edition.
 
 All 28 playable films have an original-source page and either a direct `sourceMediaUrl` or an Internet Archive `archiveId` in `poc/scene-catalog.mjs`. The eight source-needed concepts are not included in that coverage. Metropolis has a direct original-film URL, but its named local excerpts are not supported by this generator; download the original for local editing instead. Original-source coverage does not reproduce locally authored edits or browser-local Studio projects.
+
+### Fresh-machine media setup
+
+Run these commands from the repository root after `npm ci`. Ensure `ffmpeg`, `ffprobe` (included with FFmpeg), and `curl` are on `PATH`. For a restore, copy existing media and import saved `.vscene` packages first; the generator uses `ffmpeg -y` and overwrites its output clips. Do not run it over locally edited clips without backing them up.
+
+To regenerate all 27 scenes supported by the generator (324 clips), use the catalog rather than copying the `--list` output, which also includes the unsupported Metropolis entry:
+
+```sh
+node --input-type=module <<'JS'
+import { spawnSync } from "node:child_process";
+import { SCENE_CATALOG } from "./poc/scene-catalog.mjs";
+const ids = SCENE_CATALOG
+  .filter(scene => scene.availability === "ready" && scene.labels && scene.moments
+    && (scene.sourceMediaUrl || scene.archiveId))
+  .map(scene => scene.id);
+const result = spawnSync(process.execPath, [
+  "scripts/fetch-archive-scene.mjs", "--cache-sources=/tmp/video-sync-sources", ...ids,
+], { stdio: "inherit" });
+if (result.error) throw result.error;
+process.exit(result.status ?? 1);
+JS
+```
+
+This downloads full original films into `/tmp/video-sync-sources`, then cuts twelve clips per scene using the catalog's `moments` timestamps. Full sources require substantially more bandwidth and disk space than the roughly 549 MB prepared clip library. The temporary cache may be cleared by the OS; use a persistent directory outside the repository if needed. Without `--cache-sources`, FFmpeg seeks directly into the remote film instead.
+
+Generation stops on the first failure. For HTTP 429, wait and retry the affected scene; do not change its source edition or timestamps to bypass a transient failure. Resume a particular scene at the first failed clip, for example:
+
+```sh
+npm run media:archive -- --cache-sources=/tmp/video-sync-sources --start=9 trip-to-the-moon
+```
+
+`--start=9` writes clips 9–12 only; it is not an automatic missing-file check. If a cached film is incomplete, remove that scene's cache file before retrying: the downloader only checks that the cached file exceeds 1 MB, not that the download finished. Rerun the remaining scene IDs separately after a batch failure.
+
+### Metropolis and locally authored cuts
+
+For an exact restore, copy `assets/scenes/metropolis/` from an existing machine. Its twelve named files are listed in `SCENE_CATALOG` under `metropolis-machine`. The catalog records clip-local playback offsets, not all original-film cut timestamps; do not treat those offsets as full-film in-points. The provenance notes record eight approximate source moments, but are insufficient to reconstruct all twelve exact cuts.
+
+To download the configured original for manual cutting:
+
+```sh
+mkdir -p /tmp/video-sync-sources
+curl -L --fail --retry 8 --retry-delay 15 \
+  -o /tmp/video-sync-sources/metropolis-machine.webm \
+  'https://upload.wikimedia.org/wikisource/en/7/75/Metropolis_%281927%2C_English_titles_1930s%29.webm'
+```
+
+If the prepared files cannot be recovered, inspect that film and choose moving, title-free eight-second ranges. For each cut, set its reviewed original-film start time and the exact catalog output filename, then use the same encoding settings as the generator:
+
+```sh
+# Example variables: replace the start time with a visually reviewed in-point.
+cut_start_seconds=150
+cut_filename=shift-march.mp4
+mkdir -p assets/scenes/metropolis
+ffmpeg -hide_banner -loglevel error -n \
+  -ss "$cut_start_seconds" -i /tmp/video-sync-sources/metropolis-machine.webm \
+  -t 8 -an \
+  -vf 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p' \
+  -c:v libx264 -preset veryfast -crf 23 -g 30 -movflags +faststart \
+  "assets/scenes/metropolis/$cut_filename"
+```
+
+The example is a cutting template, not an exact restore recipe. `-n` prevents overwriting an existing cut. Review every replacement in playback and record its original-film in-point before calling the restore complete. Do not change runtime filenames or loop assignments just to make missing media checks pass.
+
+For custom Scene Studio work, import the exported `.vscene` package through **Files → Import scene**, then publish it to Live Console. Downloading the original film alone does not restore a browser-local draft, its chosen ranges, or its loops. See [Scene Studio](docs/12-scene-studio.md) for authoring and save/publish behavior.
+
+### Verify the installation
+
+```sh
+npm run media:validate
+```
+
+With the full built-in library restored, expect 36 scenes, 28 playable scenes, and 336 probed media files. A missing Metropolis directory will fail validation even if the other 27 scenes are ready. Start the app, play scenes on both decks, exercise A–H, and check the projector output; validation checks files and metadata, not visible motion or the correctness of a local edit. Refresh an already-open Live Console after importing or publishing scenes.
 
 ## Use it with Rekordbox
 
