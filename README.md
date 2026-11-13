@@ -186,6 +186,21 @@ For an intentional Link setup, opt the relay in with `VIDEO_SYNC_LINK=on npm run
 
 Mapped controller Load presses claim the next item in the scene queue. On macOS, the deck-state v2 adapter also fingerprints a visible Rekordbox track title and advances the queue when that identity changes, covering mouse and keyboard loads when the current layout exposes the title through Accessibility. The two paths are deduplicated so one controller load consumes one queue entry. If a Rekordbox layout does not expose track identity, controller Load and manual selection remain the fallback.
 
+### macOS Accessibility permission and automatic hot cues
+
+Automatic visual changes when a song passes a Hot Cue require the macOS Rekordbox adapter to read the deck playhead and cue timestamps. Controller MIDI button presses alone do not provide that timeline. For example, passing Hot Cue B should activate B's assigned visual loop without pressing B again.
+
+1. Open **System Settings → Privacy & Security → Accessibility** and enable **node**. macOS may describe this as allowing Node to control the computer. Accessibility is a broad permission; this adapter uses it to observe Rekordbox's visible deck state.
+2. If Node is absent, click **+**, use **Command–Shift–G**, and select the Node executable that actually runs Video Sync. For a LaunchAgent, use its `ProgramArguments` executable; it can differ from `command -v node` in your terminal.
+3. Restart Video Sync after granting access so it relaunches the adapter. Restart a terminal session with `npm run dev`; for the `com.asaeed.video-sync` LaunchAgent, run:
+
+   ```sh
+   launchctl kickstart -k "gui/$(id -u)/com.asaeed.video-sync"
+   ```
+
+4. Keep Rekordbox open and show the deck's **PAD / Hot Cue** panel so its cue positions are exposed. Refresh Live Console after updating its code.
+5. Check `http://127.0.0.1:4316/api/bridge/status`: `rekordboxAdapter.state` should be `running` and `latestRekordbox` should contain deck observations. `permission-required` means access is still blocked; `waiting` means Rekordbox is not running. An absent cue timeline prevents automatic crossings even when MIDI is working. Live Console's Bridge drawer reports cue metadata availability.
+
 See the [bridge guide](bridge/README.md) for MIDI discovery, self-tests, event capture, and custom controller maps.
 
 <p align="center">
